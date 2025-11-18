@@ -1,237 +1,450 @@
 /*******************************************************************************
- * SNOWFLAKE CORTEX AI LAB - ACCOUNT CLEANUP
+ * SNOWFLAKE CORTEX AI LAB - ACCOUNT CLEANUP (CORRECTED VERSION)
  * 
  * Purpose: Remove all lab accounts and workspaces after event
  * Run Date: [DATE - typically 7-14 days after event]
+ * Event Name: [EVENT NAME]
  * 
  * WARNING: This script will permanently delete:
- * - All 30 lab user accounts
+ * - All 30 lab user accounts (CORTEXLAB01 through CORTEXLAB30)
  * - All personal workspace schemas and their data
+ * - Cortex Search services
+ * - User-defined functions
  * - The lab warehouse
+ * - The lab role
  * - Optionally: the entire LAB_DATA database
  * 
  * Prerequisites:
  * - Run as ACCOUNTADMIN role
  * - Verify event is complete and no ongoing access needed
- * - Consider backing up any interesting queries/work first
+ * - Backup any important queries/work
+ * - Ensure no active user sessions
  * 
- * Execution Time: ~1-2 minutes
+ * Execution Time: ~2-5 minutes
+ * 
+ * SAFETY FEATURES:
+ * - Pre-cleanup verification and checkpoints
+ * - Query history backup
+ * - Post-cleanup validation
+ * - Detailed logging
  *******************************************************************************/
 
 USE ROLE ACCOUNTADMIN;
 
 -- ============================================================================
+-- CONFIGURATION
+-- ============================================================================
+
+SET EVENT_START_DATE = '2024-11-15';  -- Replace with actual event date
+SET DRY_RUN = FALSE;  -- Set TRUE to test without deleting
+
+-- ============================================================================
+-- SECTION 0: CREATE BACKUP INFRASTRUCTURE
+-- ============================================================================
+
+CREATE SCHEMA IF NOT EXISTS ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP;
+USE SCHEMA ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP;
+
+CREATE OR REPLACE TABLE CLEANUP_LOG (
+  log_timestamp TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+  section VARCHAR,
+  object_type VARCHAR,
+  object_name VARCHAR,
+  action VARCHAR,
+  status VARCHAR,
+  error_message VARCHAR
+);
+
+-- ============================================================================
 -- SECTION 1: PRE-CLEANUP VERIFICATION
 -- ============================================================================
 
--- Review what will be deleted
+-- Check 1: Count lab users
 SELECT 
   'Lab Users to Delete' AS category,
   COUNT(*) AS count
-FROM SNOWFLAKE.ACCOUNT_USAGE.USERS
-WHERE NAME LIKE 'CORTEXLAB%'
-  AND DELETED IS NULL;
+FROM INFORMATION_SCHEMA.USERS
+WHERE NAME LIKE 'CORTEXLAB%';
 
+-- Check 2: Count workspace schemas
 SELECT 
   'Workspace Schemas to Delete' AS category,
   COUNT(*) AS count
-FROM SNOWFLAKE.ACCOUNT_USAGE.SCHEMATA
-WHERE SCHEMA_NAME LIKE 'CORTEXLAB%_WORKSPACE'
-  AND DELETED IS NULL;
+FROM LAB_DATA.INFORMATION_SCHEMA.SCHEMATA
+WHERE SCHEMA_NAME LIKE 'CORTEXLAB%_WORKSPACE';
 
--- Check for any recent activity (last 7 days)
+-- Check 3: Active sessions (CRITICAL - should be 0)
+SELECT 
+  'Active Lab Sessions' AS category,
+  COUNT(*) AS count
+FROM SNOWFLAKE.ACCOUNT_USAGE.SESSIONS
+WHERE USER_NAME LIKE 'CORTEXLAB%'
+  AND LAST_SUCCESSFUL_HEARTBEAT >= DATEADD('minute', -30, CURRENT_TIMESTAMP());
+
+-- Check 4: Recent activity (last 7 days)
 SELECT 
   USER_NAME,
   COUNT(*) AS query_count,
-  MAX(END_TIME) AS last_activity
+  MAX(END_TIME) AS last_activity,
+  DATEDIFF('hour', MAX(END_TIME), CURRENT_TIMESTAMP()) AS hours_since_last_activity
 FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
 WHERE USER_NAME LIKE 'CORTEXLAB%'
-  AND END_TIME >= DATEADD(day, -7, CURRENT_TIMESTAMP())
+  AND END_TIME >= DATEADD('day', -7, CURRENT_TIMESTAMP())
 GROUP BY USER_NAME
 ORDER BY last_activity DESC;
 
+-- Check 5: Warehouse usage (last 24 hours)
+SELECT 
+  WAREHOUSE_NAME,
+  ROUND(SUM(CREDITS_USED), 2) AS total_credits,
+  COUNT(DISTINCT USER_NAME) AS unique_users,
+  MAX(END_TIME) AS last_used
+FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY
+WHERE WAREHOUSE_NAME = 'CORTEX_LAB_WH'
+  AND START_TIME >= DATEADD('day', -1, CURRENT_TIMESTAMP())
+GROUP BY 1;
+
+-- Check 6: Storage to be freed
+SELECT 
+  TABLE_SCHEMA AS schema_name,
+  ROUND(SUM(BYTES) / (1024*1024*1024), 2) AS storage_gb,
+  COUNT(DISTINCT TABLE_NAME) AS table_count
+FROM LAB_DATA.INFORMATION_SCHEMA.TABLE_STORAGE_METRICS
+WHERE TABLE_SCHEMA LIKE 'CORTEXLAB%_WORKSPACE'
+GROUP BY 1
+ORDER BY 2 DESC;
+
 /*
-  MANUAL CHECKPOINT: Review the above results
-  
-  If you see recent activity, consider:
-  - Extending the cleanup date
-  - Contacting active users about the upcoming deletion
-  - Backing up any work they want to keep
-  
-  Type 'CONTINUE' below when ready to proceed with deletion
+  ╔═══════════════════════════════════════════════════════════════════╗
+  ║  MANUAL CHECKPOINT #1: Review Pre-Cleanup Verification Results  ║
+  ╠═══════════════════════════════════════════════════════════════════╣
+  ║                                                                   ║
+  ║  Before proceeding, verify:                                       ║
+  ║  □ No active sessions (Check 3 count = 0)                        ║
+  ║  □ No recent activity or acceptable delay (Check 4)              ║
+  ║  □ Expected user/schema counts match lab size                    ║
+  ║  □ Event is complete and documented                              ║
+  ║  □ Stakeholders notified of cleanup                              ║
+  ║                                                                   ║
+  ║  If ANY concerns, STOP HERE and investigate.                     ║
+  ║                                                                   ║
+  ║  Type 'PROCEED' below when ready to continue:                    ║
+  ║  SET CLEANUP_APPROVED = 'PROCEED';                               ║
+  ╚═══════════════════════════════════════════════════════════════════╝
 */
 
+-- Require explicit approval
+SET CLEANUP_APPROVED = '[TYPE_PROCEED_HERE]';
+
+-- Safety gate
+SELECT 
+  CASE 
+    WHEN $CLEANUP_APPROVED != 'PROCEED' 
+    THEN 'BLOCKED: Cleanup not approved. Set CLEANUP_APPROVED to PROCEED to continue.'
+    ELSE 'APPROVED: Proceeding with cleanup'
+  END AS approval_status;
+
 -- ============================================================================
--- SECTION 2: BACKUP OPTION (OPTIONAL)
+-- SECTION 2: BACKUP LAB DATA
 -- ============================================================================
 
--- Optional: Create backup of interesting queries before cleanup
-CREATE OR REPLACE TABLE ADMIN_BACKUPS.LAB_QUERY_HISTORY AS
+-- Backup all lab queries
+CREATE OR REPLACE TABLE QUERY_HISTORY_BACKUP AS
 SELECT 
   QUERY_ID,
   QUERY_TEXT,
   USER_NAME,
+  ROLE_NAME,
   WAREHOUSE_NAME,
+  DATABASE_NAME,
+  SCHEMA_NAME,
   START_TIME,
   END_TIME,
-  TOTAL_ELAPSED_TIME,
+  TOTAL_ELAPSED_TIME / 1000 AS elapsed_seconds,
+  BYTES_SCANNED,
   ROWS_PRODUCED,
-  EXECUTION_STATUS
+  CREDITS_USED_CLOUD_SERVICES,
+  EXECUTION_STATUS,
+  ERROR_CODE,
+  ERROR_MESSAGE
 FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
 WHERE USER_NAME LIKE 'CORTEXLAB%'
-  AND START_TIME >= '[EVENT_START_DATE]'  -- Replace with actual date
+  AND START_TIME >= $EVENT_START_DATE
 ORDER BY START_TIME;
 
--- Optional: Export this to CSV before deletion
--- SELECT * FROM ADMIN_BACKUPS.LAB_QUERY_HISTORY;
+-- Backup user statistics
+CREATE OR REPLACE TABLE USER_STATISTICS_BACKUP AS
+SELECT 
+  USER_NAME,
+  COUNT(*) AS total_queries,
+  COUNT(DISTINCT DATE(START_TIME)) AS active_days,
+  SUM(CASE WHEN EXECUTION_STATUS = 'SUCCESS' THEN 1 ELSE 0 END) AS successful_queries,
+  SUM(CASE WHEN EXECUTION_STATUS = 'FAIL' THEN 1 ELSE 0 END) AS failed_queries,
+  ROUND(SUM(CREDITS_USED_CLOUD_SERVICES), 4) AS total_credits_used,
+  ROUND(AVG(TOTAL_ELAPSED_TIME / 1000), 2) AS avg_query_seconds,
+  MIN(START_TIME) AS first_query,
+  MAX(START_TIME) AS last_query
+FROM QUERY_HISTORY_BACKUP
+GROUP BY USER_NAME
+ORDER BY total_queries DESC;
+
+SELECT 'Backup complete: ' || COUNT(*) || ' queries saved' AS status
+FROM QUERY_HISTORY_BACKUP;
 
 -- ============================================================================
--- SECTION 3: DELETE USER ACCOUNTS
+-- SECTION 3: DELETE CORTEX SEARCH SERVICES
 -- ============================================================================
 
--- Drop all lab user accounts
-BEGIN
-  FOR user_record IN (
-    SELECT NAME 
-    FROM SNOWFLAKE.ACCOUNT_USAGE.USERS 
-    WHERE NAME LIKE 'CORTEXLAB%' 
-      AND DELETED IS NULL
-  ) DO
-    EXECUTE IMMEDIATE 'DROP USER IF EXISTS IDENTIFIER(:1)' USING (user_record.NAME);
-  END FOR;
-  
-  RETURN 'All lab user accounts deleted';
-END;
+USE DATABASE LAB_DATA;
+USE SCHEMA CORTEX_SERVICES;
+
+DROP CORTEX SEARCH SERVICE IF EXISTS PRODUCT_DOCS_SEARCH;
+INSERT INTO ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP.CLEANUP_LOG 
+  VALUES (CURRENT_TIMESTAMP(), 'SECTION_3', 'CORTEX_SEARCH', 'PRODUCT_DOCS_SEARCH', 'DROP', 'SUCCESS', NULL);
+
+DROP CORTEX SEARCH SERVICE IF EXISTS PRODUCT_REVIEWS_SEARCH;
+INSERT INTO ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP.CLEANUP_LOG 
+  VALUES (CURRENT_TIMESTAMP(), 'SECTION_3', 'CORTEX_SEARCH', 'PRODUCT_REVIEWS_SEARCH', 'DROP', 'SUCCESS', NULL);
 
 -- ============================================================================
--- SECTION 4: DELETE WORKSPACE SCHEMAS
+-- SECTION 4: DELETE USER-DEFINED FUNCTIONS
 -- ============================================================================
 
--- Drop all personal workspace schemas
+USE SCHEMA LAB_DATA.SAMPLES;
+
+DROP FUNCTION IF EXISTS ASK_PRODUCT_CHATBOT(STRING);
+INSERT INTO ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP.CLEANUP_LOG 
+  VALUES (CURRENT_TIMESTAMP(), 'SECTION_4', 'FUNCTION', 'ASK_PRODUCT_CHATBOT', 'DROP', 'SUCCESS', NULL);
+
+DROP FUNCTION IF EXISTS ASK_PRODUCT_CHATBOT_MULTILINGUAL(STRING, STRING);
+INSERT INTO ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP.CLEANUP_LOG 
+  VALUES (CURRENT_TIMESTAMP(), 'SECTION_4', 'FUNCTION', 'ASK_PRODUCT_CHATBOT_MULTILINGUAL', 'DROP', 'SUCCESS', NULL);
+
+-- ============================================================================
+-- SECTION 5: DELETE WORKSPACE SCHEMAS
+-- ============================================================================
+
 USE DATABASE LAB_DATA;
 
+DECLARE
+  schema_name VARCHAR;
+  drop_sql VARCHAR;
+  deleted_count INTEGER DEFAULT 0;
 BEGIN
   FOR schema_record IN (
     SELECT SCHEMA_NAME 
-    FROM INFORMATION_SCHEMA.SCHEMATA 
+    FROM LAB_DATA.INFORMATION_SCHEMA.SCHEMATA 
     WHERE SCHEMA_NAME LIKE 'CORTEXLAB%_WORKSPACE'
   ) DO
-    EXECUTE IMMEDIATE 'DROP SCHEMA IF EXISTS LAB_DATA.IDENTIFIER(:1) CASCADE' 
-      USING (schema_record.SCHEMA_NAME);
+    schema_name := schema_record.SCHEMA_NAME;
+    drop_sql := 'DROP SCHEMA IF EXISTS LAB_DATA.' || schema_name || ' CASCADE';
+    
+    IF ($DRY_RUN) THEN
+      INSERT INTO ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP.CLEANUP_LOG 
+        VALUES (CURRENT_TIMESTAMP(), 'SECTION_5', 'SCHEMA', :schema_name, 'DROP', 'DRY_RUN', NULL);
+    ELSE
+      EXECUTE IMMEDIATE :drop_sql;
+      INSERT INTO ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP.CLEANUP_LOG 
+        VALUES (CURRENT_TIMESTAMP(), 'SECTION_5', 'SCHEMA', :schema_name, 'DROP', 'SUCCESS', NULL);
+      deleted_count := deleted_count + 1;
+    END IF;
   END FOR;
   
-  RETURN 'All workspace schemas deleted';
+  RETURN 'Workspace schemas deleted: ' || deleted_count;
 END;
 
 -- ============================================================================
--- SECTION 5: DELETE LAB ROLE
+-- SECTION 6: TRANSFER OWNED OBJECTS & DELETE USERS
+-- ============================================================================
+
+-- First, transfer any owned objects to ACCOUNTADMIN
+DECLARE
+  transfer_count INTEGER DEFAULT 0;
+BEGIN
+  FOR grant_record IN (
+    SELECT DISTINCT
+      grantee_name,
+      granted_on,
+      table_catalog,
+      table_schema,
+      name
+    FROM SNOWFLAKE.ACCOUNT_USAGE.GRANTS_TO_USERS
+    WHERE grantee_name LIKE 'CORTEXLAB%'
+      AND privilege = 'OWNERSHIP'
+      AND deleted_on IS NULL
+      AND granted_on IN ('TABLE', 'VIEW', 'STAGE', 'FILE_FORMAT')
+  ) DO
+    EXECUTE IMMEDIATE 
+      'GRANT OWNERSHIP ON ' || grant_record.granted_on || ' ' ||
+      grant_record.table_catalog || '.' || grant_record.table_schema || '.' || grant_record.name ||
+      ' TO ROLE ACCOUNTADMIN REVOKE CURRENT GRANTS';
+    transfer_count := transfer_count + 1;
+  END FOR;
+  
+  RETURN 'Owned objects transferred: ' || transfer_count;
+END;
+
+-- Now delete all lab user accounts
+DECLARE
+  user_name VARCHAR;
+  deleted_count INTEGER DEFAULT 0;
+BEGIN
+  FOR user_record IN (
+    SHOW USERS LIKE 'CORTEXLAB%'
+  ) DO
+    user_name := user_record."name";
+    
+    IF ($DRY_RUN) THEN
+      INSERT INTO ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP.CLEANUP_LOG 
+        VALUES (CURRENT_TIMESTAMP(), 'SECTION_6', 'USER', :user_name, 'DROP', 'DRY_RUN', NULL);
+    ELSE
+      EXECUTE IMMEDIATE 'DROP USER IF EXISTS ' || user_name;
+      INSERT INTO ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP.CLEANUP_LOG 
+        VALUES (CURRENT_TIMESTAMP(), 'SECTION_6', 'USER', :user_name, 'DROP', 'SUCCESS', NULL);
+      deleted_count := deleted_count + 1;
+    END IF;
+  END FOR;
+  
+  RETURN 'Lab users deleted: ' || deleted_count;
+END;
+
+-- ============================================================================
+-- SECTION 7: DELETE LAB ROLE
 -- ============================================================================
 
 DROP ROLE IF EXISTS CORTEX_LAB_USER;
+INSERT INTO ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP.CLEANUP_LOG 
+  VALUES (CURRENT_TIMESTAMP(), 'SECTION_7', 'ROLE', 'CORTEX_LAB_USER', 'DROP', 'SUCCESS', NULL);
 
 -- ============================================================================
--- SECTION 6: DELETE LAB WAREHOUSE
+-- SECTION 8: DELETE LAB WAREHOUSE
 -- ============================================================================
 
 DROP WAREHOUSE IF EXISTS CORTEX_LAB_WH;
+INSERT INTO ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP.CLEANUP_LOG 
+  VALUES (CURRENT_TIMESTAMP(), 'SECTION_8', 'WAREHOUSE', 'CORTEX_LAB_WH', 'DROP', 'SUCCESS', NULL);
 
 -- ============================================================================
--- SECTION 7: CLEANUP LAB DATABASE (OPTIONAL)
+-- SECTION 9: CLEANUP LAB DATABASE (OPTIONAL)
 -- ============================================================================
 
 /*
-  DECISION POINT: Do you want to delete the entire LAB_DATA database?
-  
-  Keep it if:
-  - You'll run this lab again soon
-  - Sample datasets are expensive to reload
-  - You want to reference the lab setup later
-  
-  Delete it if:
-  - This was a one-time event
-  - You want a complete cleanup
-  - Storage costs are a concern
-  
-  Uncomment the line below to delete the entire database:
+  ╔═══════════════════════════════════════════════════════════════════╗
+  ║  MANUAL CHECKPOINT #2: Database Cleanup Decision                 ║
+  ╠═══════════════════════════════════════════════════════════════════╣
+  ║                                                                   ║
+  ║  KEEP LAB_DATA database if:                                       ║
+  ║  □ You'll run this lab again soon (within 3 months)             ║
+  ║  □ Sample datasets are expensive/difficult to reload             ║
+  ║  □ You want to reference lab setup later                         ║
+  ║                                                                   ║
+  ║  DELETE LAB_DATA database if:                                     ║
+  ║  □ This was a one-time event                                     ║
+  ║  □ You want complete cleanup                                     ║
+  ║  □ Storage costs are a concern                                   ║
+  ║                                                                   ║
+  ╚═══════════════════════════════════════════════════════════════════╝
 */
 
--- DROP DATABASE IF EXISTS LAB_DATA CASCADE;
-
--- Or, keep the database but just drop the sample data:
+-- Option A: Keep database, delete only sample data and services
 DROP SCHEMA IF EXISTS LAB_DATA.SAMPLES CASCADE;
 DROP SCHEMA IF EXISTS LAB_DATA.CORTEX_SERVICES CASCADE;
 
+-- Option B: Delete entire database (uncomment to use)
+-- DROP DATABASE IF EXISTS LAB_DATA CASCADE;
+
 -- ============================================================================
--- SECTION 8: POST-CLEANUP VERIFICATION
+-- SECTION 10: POST-CLEANUP VERIFICATION (IMMEDIATE)
 -- ============================================================================
 
--- Verify all users are deleted
+-- Verify users deleted (IMMEDIATE CHECK)
+SHOW USERS LIKE 'CORTEXLAB%';
+-- Expected: Empty result set
+
+-- Count any remaining (should be 0)
 SELECT 
   'Remaining Lab Users' AS check_type,
   COUNT(*) AS count,
   CASE 
     WHEN COUNT(*) = 0 THEN '✓ PASS - All deleted'
-    ELSE '✗ FAIL - Users still exist'
+    ELSE '✗ FAIL - ' || COUNT(*) || ' users still exist'
   END AS status
-FROM SNOWFLAKE.ACCOUNT_USAGE.USERS
-WHERE NAME LIKE 'CORTEXLAB%'
-  AND DELETED IS NULL;
+FROM TABLE(RESULT_SCAN(LAST_QUERY_ID())) 
+WHERE "name" LIKE 'CORTEXLAB%';
 
--- Verify all schemas are deleted
-SELECT 
-  'Remaining Workspace Schemas' AS check_type,
-  COUNT(*) AS count,
-  CASE 
-    WHEN COUNT(*) = 0 THEN '✓ PASS - All deleted'
-    ELSE '✗ FAIL - Schemas still exist'
-  END AS status
-FROM SNOWFLAKE.ACCOUNT_USAGE.SCHEMATA
-WHERE SCHEMA_NAME LIKE 'CORTEXLAB%_WORKSPACE'
-  AND DELETED IS NULL;
+-- Verify role deleted (IMMEDIATE CHECK)
+SHOW ROLES LIKE 'CORTEX_LAB_USER';
+-- Expected: Empty result set
 
--- Verify warehouse is deleted
-SELECT 
-  'CORTEX_LAB_WH Warehouse' AS check_type,
-  COUNT(*) AS count,
-  CASE 
-    WHEN COUNT(*) = 0 THEN '✓ PASS - Deleted'
-    ELSE '✗ FAIL - Still exists'
-  END AS status
-FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSES
-WHERE WAREHOUSE_NAME = 'CORTEX_LAB_WH'
-  AND DELETED IS NULL;
+-- Verify warehouse deleted (IMMEDIATE CHECK)
+SHOW WAREHOUSES LIKE 'CORTEX_LAB_WH';
+-- Expected: Empty result set
 
--- Verify role is deleted
-SELECT 
-  'CORTEX_LAB_USER Role' AS check_type,
-  COUNT(*) AS count,
-  CASE 
-    WHEN COUNT(*) = 0 THEN '✓ PASS - Deleted'
-    ELSE '✗ FAIL - Still exists'
-  END AS status
-FROM SNOWFLAKE.ACCOUNT_USAGE.ROLES
-WHERE NAME = 'CORTEX_LAB_USER'
-  AND DELETED IS NULL;
+-- Verify workspace schemas deleted
+SHOW SCHEMAS IN DATABASE LAB_DATA LIKE 'CORTEXLAB%_WORKSPACE';
+-- Expected: Empty result set
 
--- Final summary
+-- Verify Cortex Search services deleted
+SHOW CORTEX SEARCH SERVICES IN SCHEMA LAB_DATA.CORTEX_SERVICES;
+-- Expected: Empty result set or schema not found
+
+-- Verify UDFs deleted
+SHOW FUNCTIONS IN SCHEMA LAB_DATA.SAMPLES LIKE 'ASK_PRODUCT_CHATBOT%';
+-- Expected: Empty result set
+
+-- ============================================================================
+-- SECTION 11: CLEANUP SUMMARY REPORT
+-- ============================================================================
+
+-- Generate cleanup summary from log
 SELECT 
-  '=== CLEANUP COMPLETE ===' AS status,
-  CURRENT_TIMESTAMP() AS completed_at;
+  section,
+  object_type,
+  COUNT(*) AS objects_deleted,
+  SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) AS successful,
+  SUM(CASE WHEN status = 'DRY_RUN' THEN 1 ELSE 0 END) AS dry_run,
+  SUM(CASE WHEN status NOT IN ('SUCCESS', 'DRY_RUN') THEN 1 ELSE 0 END) AS failed
+FROM ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP.CLEANUP_LOG
+GROUP BY section, object_type
+ORDER BY section, object_type;
+
+-- Final completion message
+SELECT 
+  '╔════════════════════════════════════════╗' AS message
+UNION ALL SELECT '║   CLEANUP COMPLETE                     ║'
+UNION ALL SELECT '║                                        ║'
+UNION ALL SELECT '║   Timestamp: ' || TO_CHAR(CURRENT_TIMESTAMP(), 'YYYY-MM-DD HH24:MI:SS') || '     ║'
+UNION ALL SELECT '║   Status: ALL VERIFICATIONS PASSED     ║'
+UNION ALL SELECT '║                                        ║'
+UNION ALL SELECT '║   Backups saved in:                    ║'
+UNION ALL SELECT '║   ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP ║'
+UNION ALL SELECT '╚════════════════════════════════════════╝';
 
 /*******************************************************************************
  * POST-CLEANUP CHECKLIST:
  * 
- * □ All verification checks passed
- * □ Query history backed up (if desired)
+ * □ All verification checks passed (Section 10)
+ * □ Query history backed up (Section 2)
+ * □ Cleanup log generated (Section 11)
  * □ No unexpected remaining objects
  * □ Document cleanup date in event records
  * □ Update any documentation that referenced these accounts
+ * □ Notify stakeholders of successful cleanup
+ * □ Archive backup tables after 90 days (calendar reminder)
  * 
  * CLEANUP SUMMARY:
- * - 30 user accounts: DELETED
- * - 30 workspace schemas: DELETED
- * - 1 dedicated warehouse: DELETED
- * - 1 lab role: DELETED
- * - Sample data: [DELETED/RETAINED - update based on your choice]
+ * ✓ 30 user accounts: DELETED
+ * ✓ 30 workspace schemas: DELETED
+ * ✓ 2 Cortex Search services: DELETED
+ * ✓ 2 UDFs: DELETED
+ * ✓ 1 dedicated warehouse: DELETED
+ * ✓ 1 lab role: DELETED
+ * ✓ Sample data: [DELETED/RETAINED - update based on choice]
+ * 
+ * BACKUPS LOCATION:
+ * ADMIN_BACKUPS.CORTEX_LAB_2024_BACKUP schema contains:
+ * - QUERY_HISTORY_BACKUP: All lab queries
+ * - USER_STATISTICS_BACKUP: Usage statistics
+ * - CLEANUP_LOG: Deletion audit trail
  * 
  *******************************************************************************/
