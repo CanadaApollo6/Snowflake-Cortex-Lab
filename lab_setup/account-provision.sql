@@ -101,16 +101,11 @@ BEGIN
       'CREATE SCHEMA IF NOT EXISTS LAB_DATA.' || schema_name || '
        COMMENT = ''Personal workspace for ' || username || '''';
     
-    -- Grant full privileges on personal workspace
+    -- Grant ownership of the workspace schema to the user
+    -- This allows them to create and manage objects in their workspace
     EXECUTE IMMEDIATE
-      'GRANT ALL PRIVILEGES ON SCHEMA LAB_DATA.' || schema_name || ' TO USER ' || username;
+      'GRANT OWNERSHIP ON SCHEMA LAB_DATA.' || schema_name || ' TO USER ' || username;
     
-    -- Grant create table/view privileges
-    EXECUTE IMMEDIATE
-      'GRANT CREATE TABLE ON SCHEMA LAB_DATA.' || schema_name || ' TO USER ' || username;
-      
-    EXECUTE IMMEDIATE
-      'GRANT CREATE VIEW ON SCHEMA LAB_DATA.' || schema_name || ' TO USER ' || username;
   END FOR;
   
   RETURN 'Successfully created ' || NUM_USERS || ' lab accounts';
