@@ -16,9 +16,17 @@
  * - Build a knowledge base Q&A system
  *
  * STRUCTURE:
- * ⭐ CORE EXERCISES (3.1-3.5): Complete these in the workshop
- * 🎯 OPTIONAL EXERCISES (3.6): If time permits
- * 🚀 ADVANCED EXERCISES (3.7-3.9): For post-workshop practice
+ * ⭐ CORE EXERCISES (3.1-3.5): Complete these in the workshop (15 min)
+ * 🎯 OPTIONAL EXERCISES (3.6): If time permits (5 min)
+ * 🚀 ADVANCED EXERCISES (3.7-3.10): For post-workshop practice (varies)
+ *
+ * ESTIMATED TIME PER EXERCISE:
+ * - Exercise 3.1: 2 minutes (demo)
+ * - Exercise 3.2: 3 minutes (create search service + wait)
+ * - Exercise 3.3: 3 minutes (semantic search)
+ * - Exercise 3.4: 4 minutes (RAG pattern)
+ * - Exercise 3.5: 3 minutes (support automation)
+ * - Exercise 3.6: 5 minutes (optional showcase)
  *
  *******************************************************************************/
 
@@ -31,9 +39,9 @@ USE DATABASE LAB_DATA;
 -- ============================================================================
 /*
   If you're running behind schedule:
-  1. Complete Exercise 3.2 (create the search service) - LINE 70
+  1. Complete Exercise 3.2 (create the search service) - LINE ~95
   2. Wait ~60 seconds for it to become ACTIVE
-  3. Skip directly to Exercise 3.6 (Final Showcase Query) - LINE 377
+  3. Skip directly to Exercise 3.6 (Final Showcase Query) - LINE ~415
 
   This will show you the complete RAG pattern in action!
 */
@@ -43,13 +51,17 @@ USE DATABASE LAB_DATA;
 -- ============================================================================
 
 -- ============================================================================
--- EXERCISE 3.1: TRADITIONAL vs SEMANTIC SEARCH (2 minutes)
+-- EXERCISE 3.1: TRADITIONAL vs SEMANTIC SEARCH (2 minutes - DEMO)
 -- See the difference between keyword matching and understanding meaning
 -- ============================================================================
 
 /*
   SCENARIO: A customer asks "How do I fix connection problems?"
   Traditional search looks for exact words. Semantic search understands meaning.
+  
+  KEY CONCEPT: Semantic search uses vector embeddings to understand meaning,
+  not just match keywords. This is why it can find "network issues" when you
+  search for "connection problems" - they mean the same thing!
 */
 
 -- STEP 1: Traditional keyword search (the old way)
@@ -63,9 +75,10 @@ SELECT
 FROM PRODUCT_DOCS
 WHERE LOWER(content) LIKE '%connection problems%'
    OR LOWER(content) LIKE '%connectivity issues%'
-   OR LOWER(title) LIKE '%connection%';
+   OR LOWER(content) LIKE '%connection%';
 
 -- Notice: You have to think of every possible way someone might phrase the question!
+-- What if they say "Wi-Fi not working" or "network down" or "can't connect"?
 
 -- STEP 2: Now let's prepare for semantic search with Cortex Search
 -- First, let's look at what we'll be searching
@@ -78,6 +91,8 @@ SELECT
 FROM PRODUCT_DOCS
 ORDER BY doc_type, title;
 
+-- QUESTION: How many documents do we have? How many document types?
+
 -- ============================================================================
 -- EXERCISE 3.2: CREATE A CORTEX SEARCH SERVICE (3 minutes)
 -- Build a semantic search engine on your documentation
@@ -86,34 +101,52 @@ ORDER BY doc_type, title;
 /*
   Cortex Search creates vector embeddings of your content and enables
   semantic search - finding documents by meaning, not just keywords.
+  
+  CORTEX SEARCH SERVICE COMPONENTS:
+  - ON clause: The text column to search (creates embeddings)
+  - ATTRIBUTES: Metadata fields for filtering and display
+  - WAREHOUSE: Compute for indexing and queries
+  - TARGET_LAG: How fresh the index should be
+  - AS: The source query defining what to index
+  
+  INDEXING TIME: Typically 30-60 seconds for small datasets like ours.
+  Larger datasets (millions of rows) can take minutes to hours.
 */
 
--- STEP 1: Create schema for search services
+-- STEP 1: Create schema for search services (if not exists)
 USE SCHEMA CORTEX_SERVICES;
 
 -- STEP 2: Create a Cortex Search Service on product documentation
 -- Note: This may take 30-60 seconds to index the documents
+-- Run this entire CREATE statement at once
 
 CREATE OR REPLACE CORTEX SEARCH SERVICE PRODUCT_DOCS_SEARCH
-ON content
-ATTRIBUTES title, doc_type
-WAREHOUSE = CORTEX_LAB_WH
-TARGET_LAG = '1 minute'
+ON content                    -- What to search (the text column)
+ATTRIBUTES title, doc_type    -- Additional fields for filtering/display
+WAREHOUSE = CORTEX_LAB_WH    -- Compute for indexing
+TARGET_LAG = '1 minute'      -- How fresh the index should be
 AS (
   SELECT 
     doc_id,
-    content,
+    content,     -- This will be converted to vector embeddings
     title,
     doc_type
   FROM LAB_DATA.SAMPLES.PRODUCT_DOCS
 );
 
 -- STEP 3: Check if the search service is ready
--- Run this until you see "indexing_state":"ACTIVE"
+-- Run this query repeatedly until you see "ACTIVE" status
+-- This usually takes 30-60 seconds for this small dataset
+
 DESCRIBE CORTEX SEARCH SERVICE PRODUCT_DOCS_SEARCH;
 
--- Wait for the service to be ACTIVE before proceeding
--- This usually takes 30-60 seconds for this small dataset
+-- ⏳ WAIT for status to show "ACTIVE" before proceeding
+-- You should see output showing:
+-- - name: PRODUCT_DOCS_SEARCH
+-- - search_column: CONTENT
+-- - state: ACTIVE (when ready)
+
+-- While waiting, read about the RAG pattern in Exercise 3.4!
 
 -- ============================================================================
 -- EXERCISE 3.3: SEMANTIC SEARCH QUERIES (3 minutes)
@@ -123,6 +156,15 @@ DESCRIBE CORTEX SEARCH SERVICE PRODUCT_DOCS_SEARCH;
 /*
   Now we can search using natural language, and Cortex will find 
   semantically relevant documents even if they don't contain exact keywords.
+  
+  SEARCH SYNTAX:
+  FROM TABLE(
+    schema.SERVICE_NAME!SEARCH('your natural language query')
+  )
+  
+  RESULTS INCLUDE:
+  - All columns from the original query (doc_id, content, title, doc_type)
+  - search_score: Relevance score (higher = more relevant)
 */
 
 -- STEP 1: Search for connection issues (semantic search)
@@ -131,7 +173,7 @@ SELECT
   title,
   doc_type,
   content,
-  search_score  -- Higher score = more relevant
+  search_score  -- Higher score = more relevant (typically 0.0 to 1.0)
 FROM TABLE(
   LAB_DATA.CORTEX_SERVICES.PRODUCT_DOCS_SEARCH!SEARCH(
     'How do I fix Wi-Fi connection problems?'
@@ -142,8 +184,10 @@ LIMIT 5;
 
 -- Notice: It finds the SmartCam troubleshooting doc even though 
 -- the query said "Wi-Fi" and the doc says "network"!
+-- This is the power of semantic search - understanding meaning, not just keywords.
 
 -- STEP 2: Try different natural language queries
+-- Run this to see how semantic search handles various phrasings
 SELECT 
   query_text,
   doc_id,
@@ -189,12 +233,18 @@ FROM (
 )
 ORDER BY query_text, search_score DESC;
 
--- STEP 3: YOUR TURN - Search for specific issues
--- TODO: Write searches for these customer questions:
+-- QUESTION: Do the search results make sense for each query?
+-- Which query returned the highest search scores?
+
+-- STEP 3: YOUR TURN - Search for specific customer issues
+-- TODO: Write three separate searches for these customer questions:
 --   1. "My device won't turn on"
 --   2. "How to charge the power bank"
 --   3. "Product specifications"
+--
+-- HINT: Use the pattern from Step 1, just change the search text
 
+-- Search 1: Device won't turn on
 SELECT 
   doc_id,
   title,
@@ -202,12 +252,22 @@ SELECT
   search_score
 FROM TABLE(
   LAB_DATA.CORTEX_SERVICES.PRODUCT_DOCS_SEARCH!SEARCH(
-    -- TODO: Replace with your search query
-    'My device won''t turn on'
+    -- TODO: Replace with your search query for "device won't turn on"
+    
   )
 )
 ORDER BY search_score DESC
 LIMIT 5;
+
+-- Search 2: How to charge power bank
+-- TODO: Write complete query here
+
+
+
+-- Search 3: Product specifications  
+-- TODO: Write complete query here
+
+
 
 -- ============================================================================
 -- EXERCISE 3.4: RETRIEVAL AUGMENTED GENERATION (RAG) (4 minutes)
@@ -215,16 +275,32 @@ LIMIT 5;
 -- ============================================================================
 
 /*
-  RAG Pattern (The most important pattern in this workshop!):
-  1. Search for relevant documents (RETRIEVAL)
-  2. Pass them to an LLM as context (AUGMENTATION)
-  3. LLM generates answer based on actual docs (GENERATION)
-
+  🌟 RAG Pattern - THE MOST IMPORTANT PATTERN IN THIS WORKSHOP! 🌟
+  
+  RAG = Retrieval Augmented Generation
+  
+  THE PROBLEM: LLMs can "hallucinate" - make up plausible-sounding but 
+  incorrect information. This is unacceptable for business applications.
+  
+  THE SOLUTION: RAG Pattern
+  1. RETRIEVAL: Search for relevant documents from your actual data
+  2. AUGMENTATION: Pass those documents to the LLM as context
+  3. GENERATION: LLM generates answer based ONLY on the provided docs
+  
   This prevents hallucination - the LLM only uses real information!
+  
+  WHY IT MATTERS:
+  - Answers are grounded in your actual documentation
+  - You maintain control over the information source
+  - Easy to audit and verify responses
+  - No need to fine-tune expensive models
 */
 
 -- STEP 1: Simple RAG - answer a question using documentation
+-- Study this pattern carefully - you'll use it throughout your career!
+
 WITH search_results AS (
+  -- Step 1: RETRIEVAL - Find relevant docs
   SELECT content
   FROM TABLE(
     LAB_DATA.CORTEX_SERVICES.PRODUCT_DOCS_SEARCH!SEARCH(
@@ -235,6 +311,8 @@ WITH search_results AS (
 )
 SELECT SNOWFLAKE.CORTEX.COMPLETE(
   'mixtral-8x7b',
+  -- Step 2 & 3: AUGMENTATION + GENERATION
+  -- Notice the clear instructions to ONLY use provided context
   'Answer this question using ONLY the information provided below. 
   If the answer is not in the provided context, say "I don''t have that information."
   
@@ -247,17 +325,31 @@ SELECT SNOWFLAKE.CORTEX.COMPLETE(
 ) AS ai_answer
 FROM search_results;
 
--- STEP 2: YOUR TURN - Try the RAG pattern with a different question
--- TODO: Change the search question below to ask about battery life, charging, or setup
+-- NOTICE: The LLM's answer is based on actual documentation!
+-- Try running the search query alone to see what docs were retrieved.
+
+-- STEP 2: YOUR TURN - Try the RAG pattern with different questions
+-- TODO: Modify this query to ask about a different topic
+--       Try: battery life, charging, setup, troubleshooting, features
+--
+-- REQUIREMENTS:
+-- - Change the search query to match your question
+-- - Update the question in the prompt to match
+-- - Keep the same RAG structure (WITH clause, COMPLETE call)
+--
+-- SUGGESTED QUESTIONS TO TRY:
+-- - 'How long does battery last?'
+-- - 'How do I charge my device?'
+-- - 'What should I do if it won't turn on?'
+-- - 'What are the warranty terms?'
+-- - 'How do I enable night vision on the camera?'
+
 WITH search_results AS (
   SELECT content
   FROM TABLE(
     LAB_DATA.CORTEX_SERVICES.PRODUCT_DOCS_SEARCH!SEARCH(
-      -- TODO: Try different questions like:
-      -- 'How long does battery last?'
-      -- 'How do I charge my device?'
-      -- 'What should I do if it won''t turn on?'
-      'How do I pair Bluetooth headphones?'
+      -- TODO: Change this to your question
+      
     )
   )
   LIMIT 3
@@ -266,7 +358,7 @@ SELECT SNOWFLAKE.CORTEX.COMPLETE(
   'mixtral-8x7b',
   'Answer this question using ONLY the documentation provided. Keep it concise.
 
-  Question: How do I pair Bluetooth headphones?
+  Question: -- TODO: Change this to match your search question
 
   Documentation:
   ' || LISTAGG(content, '\n---\n') WITHIN GROUP (ORDER BY content) || '
@@ -274,6 +366,11 @@ SELECT SNOWFLAKE.CORTEX.COMPLETE(
   Answer:'
 ) AS ai_answer
 FROM search_results;
+
+-- REFLECTION QUESTIONS:
+-- 1. How does the LLM answer differ from just showing the raw docs?
+-- 2. What happens if you ask a question not covered in the docs?
+-- 3. Why is it important to tell the LLM "ONLY use provided information"?
 
 -- ⏱️ TIME CHECK: You should be at ~12 minutes elapsed. Great progress!
 
@@ -284,18 +381,23 @@ FROM search_results;
 
 /*
   SCENARIO: When a support ticket arrives, automatically:
-  1. Search for relevant documentation
-  2. Generate a helpful response
-  3. Include relevant documentation links
+  1. Translate to English if needed
+  2. Search for relevant documentation
+  3. Generate a helpful, empathetic response
+  4. Show which documentation was used
+  
+  This is a real-world application of RAG that could save hours of agent time!
 */
 
--- STEP 1: Auto-respond to a support ticket using RAG
+-- STEP 1: Auto-respond to a support ticket using RAG (EXAMPLE)
+-- This demonstrates the complete workflow
 WITH ticket AS (
   SELECT 
     ticket_id,
     subject,
     description,
-    -- Translate to English if needed
+    language,
+    -- Translate to English if needed for better search results
     CASE 
       WHEN language = 'en' THEN description
       ELSE SNOWFLAKE.CORTEX.TRANSLATE(description, language, 'en')
@@ -304,6 +406,7 @@ WITH ticket AS (
   WHERE ticket_id = 'TKT-006'  -- French ticket about defective laptop
 ),
 relevant_help AS (
+  -- Search for docs that can help with this ticket
   SELECT 
     doc_id,
     title,
@@ -336,20 +439,38 @@ SELECT
   (SELECT LISTAGG(title, ', ') WITHIN GROUP (ORDER BY search_score DESC) FROM relevant_help) AS documentation_used
 FROM ticket t;
 
--- STEP 2: YOUR TURN - Try with a different ticket
--- TODO: Change the ticket_id below to try different support scenarios
--- Try: TKT-008 (German), TKT-004 (Spanish), TKT-011 (English)
+-- Notice how the response:
+-- - Acknowledges the customer's frustration
+-- - Provides specific troubleshooting steps from documentation
+-- - Is empathetic and professional
+
+-- STEP 2: YOUR TURN - Try with different support tickets
+-- TODO: Modify the query to work with different tickets
+--
+-- AVAILABLE TICKETS TO TRY:
+-- - TKT-008: German customer received wrong item
+-- - TKT-004: Spanish customer has payment issue
+-- - TKT-011: English customer needs address change
+-- - TKT-001: English customer has damaged package
+-- - TKT-009: Japanese customer has delivery delay
+--
+-- REQUIREMENTS:
+-- - Keep the same structure (two CTEs: ticket, relevant_help)
+-- - Change only the ticket_id in the WHERE clause
+-- - Observe how the response changes based on the issue
+
 WITH ticket AS (
   SELECT
     ticket_id,
     subject,
     description,
+    language,
     CASE
       WHEN language = 'en' THEN description
       ELSE SNOWFLAKE.CORTEX.TRANSLATE(description, language, 'en')
     END AS english_description
   FROM LAB_DATA.SAMPLES.CUSTOMER_SUPPORT_TICKETS
-  WHERE ticket_id = 'TKT-008'  -- TODO: Try different ticket IDs
+  WHERE ticket_id = -- TODO: Try different ticket IDs here
 ),
 relevant_help AS (
   SELECT
@@ -378,11 +499,16 @@ SELECT
   ) AS suggested_response
 FROM ticket t;
 
+-- REFLECTION QUESTIONS:
+-- 1. How does the response quality compare across different languages?
+-- 2. Does the system find appropriate documentation for each issue?
+-- 3. How could you improve this for production use?
+
 -- ✅ CORE EXERCISES COMPLETE! You've learned semantic search and RAG patterns.
 -- ⏱️ TIME CHECK: ~15 minutes. Ready to see it all come together!
 
 -- ============================================================================
--- 🎯 OPTIONAL EXERCISES - IF TIME PERMITS (5-10 MINUTES)
+-- 🎯 OPTIONAL EXERCISE - IF TIME PERMITS (5 MINUTES)
 -- ============================================================================
 
 -- ============================================================================
@@ -391,16 +517,18 @@ FROM ticket t;
 -- ============================================================================
 
 /*
-  This query demonstrates everything you've learned:
+  This query demonstrates EVERYTHING you've learned across all 3 worksheets:
   - Multi-language support (TRANSLATE)
-  - Sentiment analysis
+  - Sentiment analysis (SENTIMENT)
   - Semantic search (CORTEX SEARCH)
   - RAG pattern (Search + LLM)
   - All in pure SQL!
+  
+  This is the "wow moment" - show this to your manager/team!
 */
 
 WITH customer_inquiries AS (
-  -- Simulating incoming customer questions
+  -- Simulating incoming customer questions in multiple languages
   SELECT 'How do I pair my headphones?' AS question, 'en' AS lang
   UNION ALL SELECT '¿Cuál es la garantía?', 'es'
   UNION ALL SELECT 'La caméra ne fonctionne pas', 'fr'
@@ -415,7 +543,7 @@ processed_inquiries AS (
       WHEN lang = 'en' THEN question
       ELSE SNOWFLAKE.CORTEX.TRANSLATE(question, lang, 'en')
     END AS english_question,
-    -- Get sentiment
+    -- Get sentiment to prioritize frustrated customers
     SNOWFLAKE.CORTEX.SENTIMENT(question) AS sentiment,
     -- Search for relevant docs
     (
@@ -449,7 +577,8 @@ SELECT
 
     Answer:'
   ) AS generated_answer
-FROM processed_inquiries;
+FROM processed_inquiries
+ORDER BY sentiment ASC;  -- Most negative sentiment first for priority
 
 -- 🎉 FANTASTIC! You've seen how Cortex brings AI directly into your SQL queries!
 
@@ -459,13 +588,22 @@ FROM processed_inquiries;
 -- ============================================================================
 
 -- ============================================================================
--- EXERCISE 3.7: FILTER SEARCH BY ATTRIBUTES
+-- EXERCISE 3.7: FILTER SEARCH BY ATTRIBUTES (ADVANCED)
 -- Narrow searches to specific product categories or document types
 -- ============================================================================
 
 /*
   You can filter search results by the attributes you defined when 
   creating the search service (title, doc_type in our case)
+  
+  FILTER SYNTAX:
+  {'filter': {'@eq': {'field_name': 'value'}}}
+  
+  AVAILABLE OPERATORS:
+  - @eq: Equals
+  - @ne: Not equals
+  - @gt: Greater than (for numeric fields)
+  - @lt: Less than (for numeric fields)
 */
 
 -- STEP 1: Search only troubleshooting guides
@@ -496,39 +634,39 @@ FROM TABLE(
 )
 ORDER BY search_score DESC;
 
--- STEP 3: YOUR TURN - Product-specific documentation search
+-- STEP 3: YOUR TURN - Product-specific filtered search
 -- TODO: Search for battery information only in user manuals
-SELECT 
-  doc_id,
-  title,
-  doc_type,
-  LEFT(content, 300) AS content_preview,
-  search_score
-FROM TABLE(
-  LAB_DATA.CORTEX_SERVICES.PRODUCT_DOCS_SEARCH!SEARCH(
-    -- TODO: Your search query here
-    'battery charging optimization',
-    {'filter': {'@eq': {'doc_type': 'user_manual'}}}
-  )
-)
-ORDER BY search_score DESC
-LIMIT 5;
+--
+-- REQUIREMENTS:
+-- - Search query should be about battery (life, charging, optimization, etc.)
+-- - Filter for doc_type = 'user_manual'
+-- - Return doc_id, title, doc_type, content preview (first 300 chars), search_score
+-- - Limit to top 5 results
+--
+-- HINT: Combine the search pattern from Step 2 with a battery-related query
+
+-- TODO: Write your complete query here
+
+
+
 
 -- ============================================================================
--- EXERCISE 3.8: BUILD A COMPLETE KNOWLEDGE BASE CHATBOT (ADVANCED)
--- Putting it all together with reusable functions!
+-- EXERCISE 3.8: CREATE A REUSABLE CHATBOT FUNCTION (ADVANCED)
+-- Build a production-ready knowledge base assistant
 -- ============================================================================
 
 /*
-  FINAL CHALLENGE: Build a complete chatbot system that:
-  1. Takes a customer question
+  ADVANCED CHALLENGE: Create a reusable SQL function that:
+  1. Takes a customer question as input
   2. Searches relevant documentation
   3. Generates an accurate, helpful answer
-  4. Cites sources
-  5. Handles edge cases
+  4. Returns confidence level and sources
+  5. Handles edge cases gracefully
+  
+  This is production-ready code you could actually deploy!
 */
 
--- Create a reusable chatbot query pattern
+-- TODO: Study this function carefully - it's a complete chatbot implementation
 CREATE OR REPLACE FUNCTION ASK_PRODUCT_CHATBOT(question STRING)
 RETURNS TABLE (
   question STRING,
@@ -576,12 +714,12 @@ $$
   SELECT * FROM generated_answer
 $$;
 
--- STEP 1: Test the chatbot function
+-- Test the chatbot function with a single question
 SELECT * FROM TABLE(ASK_PRODUCT_CHATBOT(
   'How do I enable noise cancellation on the headphones?'
 ));
 
--- STEP 2: Test with multiple questions
+-- Test with multiple questions at once
 SELECT * FROM TABLE(ASK_PRODUCT_CHATBOT('What is the battery life of the smart watch?'))
 UNION ALL
 SELECT * FROM TABLE(ASK_PRODUCT_CHATBOT('Can the camera work without WiFi?'))
@@ -590,22 +728,37 @@ SELECT * FROM TABLE(ASK_PRODUCT_CHATBOT('How do I update my laptop firmware?'))
 UNION ALL
 SELECT * FROM TABLE(ASK_PRODUCT_CHATBOT('What is your return policy?'));
 
--- STEP 3: YOUR TURN - Test the chatbot with your own questions
--- TODO: Ask 3 questions you think customers might ask
+-- YOUR TURN: Test with your own questions
+-- TODO: Ask 3-5 questions you think customers might ask
+-- Try edge cases: questions not in docs, ambiguous questions, etc.
+
 SELECT * FROM TABLE(ASK_PRODUCT_CHATBOT(
-  -- TODO: Your question here
-  'Which products are waterproof?'
+  -- TODO: Your question 1 here
+  
 ));
+
+-- TODO: Question 2
+
+
+-- TODO: Question 3
+
+
+-- REFLECTION QUESTIONS:
+-- 1. How does the confidence score help you decide if the answer is reliable?
+-- 2. What happens when you ask about topics not in the documentation?
+-- 3. How could you enhance this function for production use?
 
 -- ============================================================================
 -- EXERCISE 3.9: MULTI-LINGUAL CHATBOT (ADVANCED)
--- Handle questions in any language
+-- Handle questions in any language automatically
 -- ============================================================================
 
 /*
-  ADVANCED: Combine translation + search + RAG for global support
+  ADVANCED: Take the chatbot to the next level with automatic translation
+  This enables truly global support with a single function!
 */
 
+-- TODO: Study this multi-lingual implementation
 CREATE OR REPLACE FUNCTION ASK_PRODUCT_CHATBOT_MULTILINGUAL(
   question STRING,
   question_language STRING
@@ -667,7 +820,7 @@ $$
   FROM english_answer
 $$;
 
--- Test multilingual chatbot
+-- Test multilingual chatbot with various languages
 SELECT * FROM TABLE(ASK_PRODUCT_CHATBOT_MULTILINGUAL(
   '¿Cuánto tiempo dura la batería de los auriculares?',  -- Spanish
   'es'
@@ -678,74 +831,90 @@ SELECT * FROM TABLE(ASK_PRODUCT_CHATBOT_MULTILINGUAL(
   'fr'
 ));
 
+-- TODO: Test with other languages
+-- Try: German (de), Japanese (ja), Chinese (zh), Italian (it)
+
+-- TODO: Your multilingual test queries here
+
+
+
+
 -- ============================================================================
--- EXERCISE 3.10: CREATE YOUR OWN SEARCH SERVICE (BONUS)
+-- EXERCISE 3.10: CREATE YOUR OWN SEARCH SERVICE (BONUS CHALLENGE)
 -- Practice creating a search service on different data
 -- ============================================================================
 
 /*
   CHALLENGE: Create a search service on customer reviews
-  This will let you search reviews semantically
+  This will let you search reviews semantically and analyze customer feedback
+  
+  STEPS TO COMPLETE:
+  1. Create the search service
+  2. Wait for it to be ACTIVE
+  3. Test semantic search on reviews
+  4. Use RAG to analyze customer sentiment on features
 */
 
--- TODO: Create a Cortex Search Service on PRODUCT_REVIEWS
--- Hint: Search on review_text, with attributes for product_name and rating
+-- TODO: Complete this CREATE statement
+-- REQUIREMENTS:
+-- - Service name: PRODUCT_REVIEWS_SEARCH
+-- - Search on: review_text column
+-- - Attributes: product_name, rating
+-- - Use CORTEX_LAB_WH warehouse
+-- - Source: LAB_DATA.SAMPLES.PRODUCT_REVIEWS table
 
 CREATE OR REPLACE CORTEX SEARCH SERVICE PRODUCT_REVIEWS_SEARCH
-ON review_text
-ATTRIBUTES product_name, rating
+ON -- TODO: Which column to search?
+ATTRIBUTES -- TODO: Which attributes to include?
 WAREHOUSE = CORTEX_LAB_WH
 TARGET_LAG = '1 minute'
 AS (
-  SELECT 
-    review_id,
-    review_text,
-    product_name,
-    rating
-  FROM LAB_DATA.SAMPLES.PRODUCT_REVIEWS
+  -- TODO: Write your SELECT statement
+  
 );
 
--- Wait for it to be active, then test it
+-- Wait for it to be active
 DESCRIBE CORTEX SEARCH SERVICE PRODUCT_REVIEWS_SEARCH;
 
--- TODO: Search for reviews mentioning specific features
+-- TODO: Once ACTIVE, search for reviews mentioning specific features
+-- Example: Search for "sound quality and noise cancellation"
+
 SELECT 
   review_id,
   product_name,
   rating,
-  review_text,
+  LEFT(review_text, 200) AS review_preview,
   search_score
 FROM TABLE(
   LAB_DATA.CORTEX_SERVICES.PRODUCT_REVIEWS_SEARCH!SEARCH(
-    'sound quality and noise cancellation'
+    -- TODO: Your search query here
+    
   )
 )
 ORDER BY search_score DESC
 LIMIT 5;
 
--- TODO: Use RAG to summarize what customers say about a feature
+-- TODO: Use RAG to summarize customer feedback on a specific feature
+-- REQUIREMENTS:
+-- - Search reviews for mentions of "battery life"
+-- - Use top 10 results
+-- - Generate a summary with COMPLETE that includes positive and negative feedback
+-- - Include product names and ratings in the context
+--
+-- HINT: Follow the RAG pattern from Exercise 3.4
+
 WITH review_search AS (
-  SELECT 
-    review_text,
-    product_name,
-    rating
-  FROM TABLE(
-    LAB_DATA.CORTEX_SERVICES.PRODUCT_REVIEWS_SEARCH!SEARCH(
-      'battery life'
-    )
-  )
+  -- TODO: Search for battery life reviews
+  
   LIMIT 10
 )
 SELECT 
   SNOWFLAKE.CORTEX.COMPLETE(
     'mixtral-8x7b',
-    'Based on these customer reviews, summarize what customers are saying about battery life. 
-    Include both positive and negative feedback.
+    -- TODO: Write your prompt here
+    -- Ask to summarize what customers say about battery life
+    -- Include both positive and negative feedback
     
-    Reviews:
-    ' || LISTAGG(product_name || ' (' || rating || ' stars): ' || review_text, '\n\n') WITHIN GROUP (ORDER BY rating DESC) || '
-    
-    Summary of battery life feedback:'
   ) AS battery_life_summary
 FROM review_search;
 
@@ -754,11 +923,13 @@ FROM review_search;
  *
  * 🎉 CONGRATULATIONS! YOU'VE COMPLETED THE SNOWFLAKE CORTEX AI LAB! 🎉
  *
- * KEY TAKEAWAYS:
+ * KEY TAKEAWAYS FROM WORKSHEET 3:
  * ✓ Semantic search finds documents by meaning, not just keywords
  * ✓ Cortex Search Service makes semantic search easy with SQL
  * ✓ RAG (Retrieval Augmented Generation) prevents LLM hallucination
  * ✓ Search + LLM = powerful, accurate knowledge base systems
+ * ✓ Filter searches by attributes for more precise results
+ * ✓ Functions make chatbots reusable and production-ready
  *
  * WHAT YOU'VE MASTERED ACROSS ALL 3 WORKSHEETS:
  * ✓ SENTIMENT - Analyze emotions in text
@@ -773,20 +944,74 @@ FROM review_search;
  * no external APIs, no complex infrastructure. Your data and AI models are
  * unified in Snowflake!
  *
- * NEXT STEPS:
- * 1. 🏠 Try this in your own Snowflake trial account (signup.snowflake.com)
- * 2. 📊 Explore Cortex Analyst for natural language to SQL queries
- * 3. 🚀 Build your own AI applications with your company's data
- * 4. 📚 Visit docs.snowflake.com/cortex for advanced features
- * 5. 🧪 Experiment with the advanced exercises (3.7-3.10) above
+ * NEXT STEPS TO CONTINUE YOUR LEARNING:
+ * 1. 🏠 Try this in your own Snowflake trial account
+ *    → Go to signup.snowflake.com for a free 30-day trial
+ *    → All Cortex features are included!
+ *
+ * 2. 📊 Explore Cortex Analyst for natural language to SQL
+ *    → Generate SQL queries from plain English questions
+ *    → Perfect for business users and analysts
+ *
+ * 3. 🎨 Try Cortex Fine-Tuning for specialized models
+ *    → Customize models for your specific use cases
+ *    → Improve accuracy on domain-specific tasks
+ *
+ * 4. 📚 Deep dive into documentation
+ *    → Visit docs.snowflake.com/cortex
+ *    → Join the Snowflake Community forums
+ *    → Check out Snowflake's YouTube channel for tutorials
+ *
+ * 5. 🧪 Complete the advanced exercises (3.7-3.10) above
+ *    → Build production-ready chatbot functions
+ *    → Create multi-lingual support systems
+ *    → Experiment with different data sources
  *
  * REAL-WORLD USE CASES YOU CAN NOW BUILD:
- * • Automated customer support triage and response generation
- * • Multi-language product review analysis and sentiment tracking
- * • Intelligent document search and question-answering systems
- * • Sales call analysis and action item extraction
- * • Content moderation and classification at scale
+ * 
+ * CUSTOMER SUPPORT:
+ * • Automated ticket triage and classification
+ * • Multi-language support response generation
+ * • Intelligent document search and Q&A
+ * • Sentiment-based priority routing
+ * 
+ * PRODUCT ANALYTICS:
+ * • Review sentiment analysis across products
+ * • Feature extraction from customer feedback
+ * • Competitive mention detection
+ * • Trend analysis and alerting
+ * 
+ * SALES & MARKETING:
+ * • Call transcript analysis and summarization
+ * • Lead scoring based on sentiment
+ * • Personalized content generation
+ * • Campaign performance analysis
+ * 
+ * OPERATIONS:
+ * • Document classification and routing
+ * • Knowledge base question answering
+ * • Process automation with NLP
+ * • Multi-language communication
+ *
+ * TIPS FOR PRODUCTION DEPLOYMENT:
+ * 
+ * 1. START SMALL: Begin with one use case, prove value, then expand
+ * 2. MONITOR COSTS: Track credit usage and optimize model selection
+ * 3. TEST THOROUGHLY: Validate LLM outputs, especially for critical applications
+ * 4. VERSION CONTROL: Keep your prompts and queries in source control
+ * 5. MEASURE SUCCESS: Define KPIs and track improvement over baseline
+ * 6. GATHER FEEDBACK: Iterate based on user feedback and accuracy metrics
+ * 7. HANDLE ERRORS: Build robust error handling for production use
+ * 8. DOCUMENT WELL: Your future self (and team) will thank you!
+ *
+ * RESOURCES:
+ * • Snowflake Cortex Documentation: docs.snowflake.com/cortex
+ * • Snowflake Community: community.snowflake.com
+ * • Quickstarts: quickstarts.snowflake.com (search for "Cortex")
+ * • YouTube: Snowflake Developers channel
+ * • GitHub: github.com/Snowflake-Labs (sample code and templates)
  *
  * Thank you for participating in the Snowflake Cortex AI Lab! 🙏
+ * We hope you're excited to bring AI into your SQL workflows!
  *
  *******************************************************************************/
