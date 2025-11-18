@@ -26,7 +26,7 @@ USE WAREHOUSE CORTEX_LAB_WH;
 -- Multi-language, varying sentiment, needs summarization and categorization
 -- ============================================================================
 
-CREATE OR REPLACE TABLE CUSTOMER_SUPPORT_TICKETS (
+CREATE OR REPLACE TABLE LAB_DATA.SAMPLES.CUSTOMER_SUPPORT_TICKETS (
   ticket_id VARCHAR(20),
   customer_id VARCHAR(20),
   subject VARCHAR(500),
@@ -40,7 +40,7 @@ CREATE OR REPLACE TABLE CUSTOMER_SUPPORT_TICKETS (
 );
 
 -- Insert realistic support tickets
-INSERT INTO CUSTOMER_SUPPORT_TICKETS VALUES
+INSERT INTO LAB_DATA.SAMPLES.CUSTOMER_SUPPORT_TICKETS VALUES
 -- English tickets
 ('TKT-001', 'CUST-1001', 'Package arrived damaged', 
  'I ordered a laptop last week and it arrived today completely damaged. The box was crushed and the screen is cracked. This is absolutely unacceptable! I need a replacement immediately or a full refund. I have been a loyal customer for 5 years and this is the worst experience I have ever had with your company.', 
@@ -113,7 +113,7 @@ INSERT INTO CUSTOMER_SUPPORT_TICKETS VALUES
 -- Multi-language reviews with clear sentiment for analysis
 -- ============================================================================
 
-CREATE OR REPLACE TABLE PRODUCT_REVIEWS (
+CREATE OR REPLACE TABLE LAB_DATA.SAMPLES.PRODUCT_REVIEWS (
   review_id VARCHAR(20),
   product_id VARCHAR(20),
   product_name VARCHAR(200),
@@ -127,7 +127,7 @@ CREATE OR REPLACE TABLE PRODUCT_REVIEWS (
   helpful_count INT
 );
 
-INSERT INTO PRODUCT_REVIEWS VALUES
+INSERT INTO LAB_DATA.SAMPLES.PRODUCT_REVIEWS VALUES
 -- 5-star reviews
 ('REV-001', 'PROD-101', 'UltraSound Pro Wireless Headphones', 'CUST-2001', 5,
  'Best headphones I have ever owned!',
@@ -214,7 +214,7 @@ INSERT INTO PRODUCT_REVIEWS VALUES
 -- For Cortex Search and RAG demonstrations
 -- ============================================================================
 
-CREATE OR REPLACE TABLE PRODUCT_DOCS (
+CREATE OR REPLACE TABLE LAB_DATA.SAMPLES.PRODUCT_DOCS (
   doc_id VARCHAR(20),
   product_id VARCHAR(20),
   doc_type VARCHAR(50),
@@ -225,7 +225,7 @@ CREATE OR REPLACE TABLE PRODUCT_DOCS (
   author VARCHAR(100)
 );
 
-INSERT INTO PRODUCT_DOCS VALUES
+INSERT INTO LAB_DATA.SAMPLES.PRODUCT_DOCS VALUES
 ('DOC-001', 'PROD-101', 'user_manual', 'UltraSound Pro - Getting Started',
  'Welcome to your new UltraSound Pro Wireless Headphones. This guide will help you set up and start using your headphones in minutes. 
 
@@ -765,7 +765,7 @@ WARRANTY:
 -- For summarization and sentiment analysis
 -- ============================================================================
 
-CREATE OR REPLACE TABLE SALES_TRANSCRIPTS (
+CREATE OR REPLACE TABLE LAB_DATA.SAMPLES.SALES_TRANSCRIPTS (
   call_id VARCHAR(20),
   sales_rep VARCHAR(100),
   customer_name VARCHAR(100),
@@ -776,7 +776,7 @@ CREATE OR REPLACE TABLE SALES_TRANSCRIPTS (
   product_discussed VARCHAR(100)
 );
 
-INSERT INTO SALES_TRANSCRIPTS VALUES
+INSERT INTO LAB_DATA.SAMPLES.SALES_TRANSCRIPTS VALUES
 ('CALL-001', 'Jennifer Martinez', 'ABC Corporation', '2024-10-01 14:00:00', 32,
  'Jennifer: Good afternoon! This is Jennifer Martinez from TechStore. Am I speaking with Michael Chen from ABC Corporation?
 
@@ -1003,14 +1003,25 @@ SELECT
   ticket_id,
   subject,
   category AS actual_category,
-  SNOWFLAKE.CORTEX.COMPLETE(
-    'mixtral-8x7b',  -- Change model name if needed for your region
-    'Categorize this customer support ticket into one of these categories: shipping_damage, returns, payment_issue, defective_product, general_inquiry. 
+  REGEXP_REPLACE(
+    SPLIT_PART(
+        TRIM(
+            SNOWFLAKE.CORTEX.COMPLETE(
+                'mixtral-8x7b',  -- Change model name if needed for your region
+                'Categorize this support ticket into exactly ONE category. 
+                Respond with ONLY the category name - no explanations, no reasoning, no additional text.
     
-    Ticket: ' || subject || '
+                Categories: shipping_damage, returns, payment_issue, product_inquiry, positive_feedback, general_inquiry
     
-    Category:'
-  ) AS suggested_category
+                Ticket: ' || subject || ' - ' || LEFT(description, 200) || '
+    
+                Category (one word only):'
+            )
+        ), 
+        '', 1
+    ), 
+    '[^a-z_]', ''
+) AS suggested_category
 FROM LAB_DATA.SAMPLES.CUSTOMER_SUPPORT_TICKETS
 LIMIT 5;
 
