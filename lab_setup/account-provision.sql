@@ -1,9 +1,9 @@
 /*******************************************************************************
  * SNOWFLAKE CORTEX AI LAB - ACCOUNT PROVISIONING
  * 
- * Purpose: Create 30 lab accounts with isolated workspaces and shared data access
- * Run Date: [DATE]
- * Event: [EVENT NAME]
+ * Purpose: Create 35 lab accounts with isolated workspaces and shared data access
+ * Run Date: 11/18/2025
+ * Event: Smart Data Cortex Lab Luncheon
  * 
  * Prerequisites:
  * - Run as ACCOUNTADMIN role
@@ -25,7 +25,7 @@ CREATE WAREHOUSE IF NOT EXISTS CORTEX_LAB_WH
        AUTO_SUSPEND = 60
        AUTO_RESUME = TRUE
        INITIALLY_SUSPENDED = TRUE
-  COMMENT = 'Warehouse for Cortex AI Lab - November 2024';
+  COMMENT = 'Warehouse for Cortex AI Lab - November 2025';
 
 -- Create lab database for shared datasets
 CREATE DATABASE IF NOT EXISTS LAB_DATA
@@ -72,54 +72,49 @@ GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE CORTEX_LAB_USER;
 -- ============================================================================
 
 -- Variable declarations for user creation
-SET NUM_USERS = 30;
-SET PASSWORD = 'CortexEvent2024!'; -- CHANGE THIS to your preferred password
+SET NUM_USERS = 35;
+SET PASSWORD = 'CortexEvent2025!'; -- CHANGE THIS to your preferred password
 SET COUNTER = 1;
 
 -- Create users in a loop
 BEGIN
-  FOR i IN 1 TO 30 DO
+  FOR i IN 1 TO $NUM_USERS DO
     LET username VARCHAR := 'CORTEXLAB' || LPAD(i::STRING, 2, '0');
     LET schema_name VARCHAR := 'CORTEXLAB' || LPAD(i::STRING, 2, '0') || '_WORKSPACE';
     
     -- Create user
     EXECUTE IMMEDIATE 
-      'CREATE USER IF NOT EXISTS IDENTIFIER(:1) 
-       PASSWORD = :2
+      'CREATE USER IF NOT EXISTS ' || username || ' 
+       PASSWORD = :1
        DEFAULT_ROLE = ''CORTEX_LAB_USER''
        DEFAULT_WAREHOUSE = ''CORTEX_LAB_WH''
-       DEFAULT_NAMESPACE = ''LAB_DATA.' || :schema_name || '''
+       DEFAULT_NAMESPACE = ''LAB_DATA.' || schema_name || '''
        MUST_CHANGE_PASSWORD = FALSE
        COMMENT = ''Lab participant - created ' || CURRENT_TIMESTAMP()::STRING || ''''
-      USING (username, $PASSWORD);
+      USING ($PASSWORD);
     
     -- Grant role to user
     EXECUTE IMMEDIATE 
-      'GRANT ROLE CORTEX_LAB_USER TO USER IDENTIFIER(:1)'
-      USING (username);
+      'GRANT ROLE CORTEX_LAB_USER TO USER ' || username;
     
     -- Create personal workspace schema
     EXECUTE IMMEDIATE
-      'CREATE SCHEMA IF NOT EXISTS LAB_DATA.IDENTIFIER(:1)
-       COMMENT = ''Personal workspace for ' || :username || ''''
-      USING (schema_name);
+      'CREATE SCHEMA IF NOT EXISTS LAB_DATA.' || schema_name || '
+       COMMENT = ''Personal workspace for ' || username || '''';
     
     -- Grant full privileges on personal workspace
     EXECUTE IMMEDIATE
-      'GRANT ALL PRIVILEGES ON SCHEMA LAB_DATA.IDENTIFIER(:1) TO USER IDENTIFIER(:2)'
-      USING (schema_name, username);
+      'GRANT ALL PRIVILEGES ON SCHEMA LAB_DATA.' || schema_name || ' TO USER ' || username;
     
     -- Grant create table/view privileges
     EXECUTE IMMEDIATE
-      'GRANT CREATE TABLE ON SCHEMA LAB_DATA.IDENTIFIER(:1) TO USER IDENTIFIER(:2)'
-      USING (schema_name, username);
+      'GRANT CREATE TABLE ON SCHEMA LAB_DATA.' || schema_name || ' TO USER ' || username;
       
     EXECUTE IMMEDIATE
-      'GRANT CREATE VIEW ON SCHEMA LAB_DATA.IDENTIFIER(:1) TO USER IDENTIFIER(:2)'
-      USING (schema_name, username);
+      'GRANT CREATE VIEW ON SCHEMA LAB_DATA.' || schema_name || ' TO USER ' || username;
   END FOR;
   
-  RETURN 'Successfully created ' || :NUM_USERS || ' lab accounts';
+  RETURN 'Successfully created ' || $NUM_USERS || ' lab accounts';
 END;
 
 -- ============================================================================
@@ -131,8 +126,8 @@ SELECT
   'User Accounts' AS object_type,
   COUNT(*) AS count,
   CASE 
-    WHEN COUNT(*) = 30 THEN '✓ PASS'
-    ELSE '✗ FAIL - Expected 30 users'
+    WHEN COUNT(*) = $NUM_USERS THEN '✓ PASS'
+    ELSE '✗ FAIL - Expected ' || $NUM_USERS || ' users'
   END AS status
 FROM SNOWFLAKE.ACCOUNT_USAGE.USERS
 WHERE NAME LIKE 'CORTEXLAB%'
@@ -143,8 +138,8 @@ SELECT
   'Workspace Schemas' AS object_type,
   COUNT(*) AS count,
   CASE 
-    WHEN COUNT(*) >= 30 THEN '✓ PASS'
-    ELSE '✗ FAIL - Expected 30+ schemas'
+    WHEN COUNT(*) >= $NUM_USERS THEN '✓ PASS'
+    ELSE '✗ FAIL - Expected ' || $NUM_USERS || ' schemas'
   END AS status
 FROM SNOWFLAKE.ACCOUNT_USAGE.SCHEMATA
 WHERE SCHEMA_NAME LIKE 'CORTEXLAB%_WORKSPACE'
@@ -169,10 +164,10 @@ ORDER BY NAME;
 SELECT 
   ROW_NUMBER() OVER (ORDER BY NAME) AS attendee_number,
   NAME AS username,
-  'CortexEvent2024!' AS password,  -- Replace with your actual password
+  'CortexEvent2025!' AS password,  -- Replace with your actual password
   'CORTEX_LAB_WH' AS warehouse,
   'LAB_DATA' AS database,
-  REPLACE(NAME, 'CORTEXLAB', 'CORTEXLAB') || '_WORKSPACE' AS personal_schema
+  NAME || '_WORKSPACE' AS personal_schema
 FROM SNOWFLAKE.ACCOUNT_USAGE.USERS
 WHERE NAME LIKE 'CORTEXLAB%'
   AND DELETED IS NULL
@@ -183,7 +178,7 @@ ORDER BY NAME;
  * 
  * □ All 30 users created successfully
  * □ All 30 workspace schemas created
- * □ Test login with cortexlab01 account
+ * □ Test login with CORTEXLAB01 account
  * □ Verify Cortex functions work: SELECT SNOWFLAKE.CORTEX.COMPLETE(...)
  * □ Load sample datasets into LAB_DATA.SAMPLES schema
  * □ Print credential cards for attendees
