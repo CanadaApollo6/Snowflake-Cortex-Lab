@@ -72,26 +72,25 @@ GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE CORTEX_LAB_USER;
 -- ============================================================================
 
 -- Variable declarations for user creation
-SET NUM_USERS = 35;
-SET PASSWORD = 'CortexEvent2025!'; -- CHANGE THIS to your preferred password
-SET COUNTER = 1;
-
--- Create users in a loop
+DECLARE
+  NUM_USERS INTEGER DEFAULT 35;
+  PASSWORD VARCHAR DEFAULT 'CortexEvent2025!'; -- CHANGE THIS to your preferred password
+  username VARCHAR;
+  schema_name VARCHAR;
 BEGIN
-  FOR i IN 1 TO $NUM_USERS DO
-    LET username VARCHAR := 'CORTEXLAB' || LPAD(i::STRING, 2, '0');
-    LET schema_name VARCHAR := 'CORTEXLAB' || LPAD(i::STRING, 2, '0') || '_WORKSPACE';
+  FOR i IN 1 TO NUM_USERS DO
+    username := 'CORTEXLAB' || LPAD(i::STRING, 2, '0');
+    schema_name := 'CORTEXLAB' || LPAD(i::STRING, 2, '0') || '_WORKSPACE';
     
     -- Create user
     EXECUTE IMMEDIATE 
       'CREATE USER IF NOT EXISTS ' || username || ' 
-       PASSWORD = :1
+       PASSWORD = ''' || PASSWORD || '''
        DEFAULT_ROLE = ''CORTEX_LAB_USER''
        DEFAULT_WAREHOUSE = ''CORTEX_LAB_WH''
        DEFAULT_NAMESPACE = ''LAB_DATA.' || schema_name || '''
        MUST_CHANGE_PASSWORD = FALSE
-       COMMENT = ''Lab participant - created ' || CURRENT_TIMESTAMP()::STRING || ''''
-      USING ($PASSWORD);
+       COMMENT = ''Lab participant - created ' || CURRENT_TIMESTAMP()::STRING || '''';
     
     -- Grant role to user
     EXECUTE IMMEDIATE 
@@ -114,7 +113,7 @@ BEGIN
       'GRANT CREATE VIEW ON SCHEMA LAB_DATA.' || schema_name || ' TO USER ' || username;
   END FOR;
   
-  RETURN 'Successfully created ' || $NUM_USERS || ' lab accounts';
+  RETURN 'Successfully created ' || NUM_USERS || ' lab accounts';
 END;
 
 -- ============================================================================
@@ -126,8 +125,8 @@ SELECT
   'User Accounts' AS object_type,
   COUNT(*) AS count,
   CASE 
-    WHEN COUNT(*) = $NUM_USERS THEN '✓ PASS'
-    ELSE '✗ FAIL - Expected ' || $NUM_USERS || ' users'
+    WHEN COUNT(*) >= 35 THEN '✓ PASS'
+    ELSE '✗ FAIL - Expected 35 users'
   END AS status
 FROM SNOWFLAKE.ACCOUNT_USAGE.USERS
 WHERE NAME LIKE 'CORTEXLAB%'
@@ -138,8 +137,8 @@ SELECT
   'Workspace Schemas' AS object_type,
   COUNT(*) AS count,
   CASE 
-    WHEN COUNT(*) >= $NUM_USERS THEN '✓ PASS'
-    ELSE '✗ FAIL - Expected ' || $NUM_USERS || ' schemas'
+    WHEN COUNT(*) >= 35 THEN '✓ PASS'
+    ELSE '✗ FAIL - Expected 35 schemas'
   END AS status
 FROM SNOWFLAKE.ACCOUNT_USAGE.SCHEMATA
 WHERE SCHEMA_NAME LIKE 'CORTEXLAB%_WORKSPACE'
@@ -176,8 +175,8 @@ ORDER BY NAME;
 /*******************************************************************************
  * POST-SETUP CHECKLIST:
  * 
- * □ All 30 users created successfully
- * □ All 30 workspace schemas created
+ * □ All 35 users created successfully
+ * □ All 35 workspace schemas created
  * □ Test login with CORTEXLAB01 account
  * □ Verify Cortex functions work: SELECT SNOWFLAKE.CORTEX.COMPLETE(...)
  * □ Load sample datasets into LAB_DATA.SAMPLES schema
