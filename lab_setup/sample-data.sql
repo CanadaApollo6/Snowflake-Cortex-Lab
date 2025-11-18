@@ -12,6 +12,7 @@
  * Prerequisites:
  * - Provisioning script has been run
  * - Running as ACCOUNTADMIN or role with CREATE TABLE privileges
+ * - Cortex privileges have been granted (for test queries to work)
  * 
  *******************************************************************************/
 
@@ -83,7 +84,7 @@ INSERT INTO CUSTOMER_SUPPORT_TICKETS VALUES
 
 -- Chinese tickets
 ('TKT-010', 'CUST-1010', '产品质量问题',
- '我购买的耳机音质很差，而且连接不稳定。我看了很多好评才决定购买的，但实际使用体验与描述完全不符。我想申请退款。请尽快处理我的请求，谢谢。',
+ '我购买的耳机音质很差,而且连接不稳定。我看了很多好评才决定购买的,但实际使用体验与描述完全不符。我想申请退款。请尽快处理我的请求,谢谢。',
  'zh', 'medium', 'open', '2024-10-06 12:30:00', 'quality_issue', 'China'),
 
 -- More English tickets for variety
@@ -168,7 +169,7 @@ INSERT INTO PRODUCT_REVIEWS VALUES
 
 ('REV-008', 'PROD-103', 'PowerBook Elite Laptop', 'CUST-2008', 2,
  '期待外れでした',
- 'レビューを見て購入しましたが、実際の性能は期待以下でした。起動が遅く、アプリケーションの動作も重いです。バッテリーの持ちも広告ほど良くありません。この価格帯なら他にもっと良い選択肢があると思います。',
+ 'レビューを見て購入しましたが,実際の性能は期待以下でした。起動が遅く,アプリケーションの動作も重いです。バッテリーの持ちも広告ほど良くありません。この価格帯なら他にもっと良い選択肢があると思います。',
  'ja', '2024-09-29 08:45:00', true, 176),
 
 -- 1-star reviews
@@ -179,13 +180,13 @@ INSERT INTO PRODUCT_REVIEWS VALUES
 
 ('REV-010', 'PROD-105', 'QuickCharge Power Bank', 'CUST-2010', 1,
  '完全な粗悪品',
- '購入して1週間で充電できなくなりました。返金を求めましたが、対応が非常に遅いです。この製品は全くお勧めできません。お金の無駄でした。他の製品を購入することをお勧めします。',
+ '購入して1週間で充電できなくなりました。返金を求めましたが,対応が非常に遅いです。この製品は全くお勧めできません。お金の無駄でした。他の製品を購入することをお勧めします。',
  'ja', '2024-10-02 09:30:00', true, 267),
 
 -- More mixed reviews
 ('REV-011', 'PROD-101', 'UltraSound Pro Wireless Headphones', 'CUST-2011', 5,
  '物超所值的耳机',
- '音质非常出色，降噪效果很好。佩戴舒适，即使长时间使用也不会感到不适。电池续航能力强，充一次电可以用好几天。强烈推荐给需要高品质耳机的朋友们。这是我买过最好的耳机。',
+ '音质非常出色,降噪效果很好。佩戴舒适,即使长时间使用也不会感到不适。电池续航能力强,充一次电可以用好几天。强烈推荐给需要高品质耳机的朋友们。这是我买过最好的耳机。',
  'zh', '2024-10-03 12:00:00', true, 198),
 
 ('REV-012', 'PROD-102', 'SmartCam 4K Security Camera', 'CUST-2012', 4,
@@ -310,7 +311,7 @@ The camera will send alerts to your phone when motion is detected in the specifi
 ('DOC-004', 'PROD-102', 'troubleshooting', 'SmartCam 4K - Common Issues',
  'TROUBLESHOOTING GUIDE - SMARTCAM 4K
 
-CAMERA WON''T CONNECT TO WI-FI:
+CAMERA WILL NOT CONNECT TO WI-FI:
 - Verify your Wi-Fi password is correct
 - Ensure you are using a 2.4GHz network (5GHz networks may have shorter range)
 - Move the camera closer to your router during setup
@@ -444,7 +445,7 @@ WATER RESISTANCE:
  'QUICKCHARGE POWER BANK - FAQ
 
 Q: How many times can the QuickCharge 20000 charge my phone?
-A: The 20,000mAh capacity can charge most smartphones 3-4 times. Exact number depends on your phone''s battery size. For example:
+A: The 20,000mAh capacity can charge most smartphones 3-4 times. Exact number depends on your phone battery size. For example:
 - iPhone 14 (3,279mAh): ~5 charges
 - Samsung S23 (3,900mAh): ~4 charges
 - iPhone 14 Pro Max (4,323mAh): ~3.5 charges
@@ -494,11 +495,11 @@ A: The QuickCharge includes:
 - Surge protection
 - Foreign object detection
 
-Q: Can I use my phone while it's charging from the power bank?
+Q: Can I use my phone while it is charging from the power bank?
 A: Yes, absolutely! You can use your phone normally while charging. However, using power-intensive apps may slow down the charging speed.
 
 Q: What is pass-through charging?
-A: Pass-through charging allows you to charge your devices while the power bank itself is being charged. However, we recommend avoiding this when possible as it may reduce the power bank''s lifespan over time.',
+A: Pass-through charging allows you to charge your devices while the power bank itself is being charged. However, we recommend avoiding this when possible as it may reduce the power bank lifespan over time.',
  'faq', '2024-09-18 13:00:00', 'Customer Support Team'),
 
 ('DOC-008', 'ALL', 'policy', 'Return and Warranty Policy',
@@ -598,7 +599,7 @@ POOR BASS RESPONSE:
 
 MICROPHONE ISSUES:
 
-PEOPLE CAN'T HEAR YOU:
+PEOPLE CANNOT HEAR YOU:
 - Ensure microphone is not muted (check LED indicator)
 - Position microphone closer to your mouth
 - Reduce background noise
@@ -622,7 +623,7 @@ ECHO DURING CALLS:
 
 CONNECTIVITY ISSUES:
 
-WON'T PAIR WITH DEVICE:
+WILL NOT PAIR WITH DEVICE:
 - Ensure headphones are in pairing mode (LED flashing blue)
 - Delete previous pairing from device and try again
 - Reset headphones to factory settings
@@ -779,7 +780,7 @@ INSERT INTO SALES_TRANSCRIPTS VALUES
 ('CALL-001', 'Jennifer Martinez', 'ABC Corporation', '2024-10-01 14:00:00', 32,
  'Jennifer: Good afternoon! This is Jennifer Martinez from TechStore. Am I speaking with Michael Chen from ABC Corporation?
 
-Michael: Yes, that''s me. Thanks for calling.
+Michael: Yes, that is me. Thanks for calling.
 
 Jennifer: Thank you for your time today, Michael. I understand you were interested in learning more about our PowerBook Elite laptop for your development team. Is that correct?
 
@@ -789,13 +790,13 @@ Jennifer: Great question. The PowerBook Elite is specifically designed for devel
 
 Michael: That sounds promising. Our developers often run multiple virtual machines and Docker containers. Will 16GB be sufficient, or should we be looking at upgrading?
 
-Jennifer: That''s a very valid concern. For your use case with VMs and containers, I would actually recommend considering our PowerBook Elite Pro model, which comes with 32GB RAM. It''s about $400 more per unit, but for your workflow, it would provide much better performance and reduce frustration for your team.
+Jennifer: That is a very valid concern. For your use case with VMs and containers, I would actually recommend considering our PowerBook Elite Pro model, which comes with 32GB RAM. It is about $400 more per unit, but for your workflow, it would provide much better performance and reduce frustration for your team.
 
 Michael: I appreciate the honest recommendation. What about the warranty and support? If a laptop fails, how quickly can we get it repaired or replaced?
 
 Jennifer: We offer a standard 1-year warranty with next-business-day replacement for defective units. For corporate customers, we also offer a 3-year extended warranty with on-site service for an additional fee. Given that you are purchasing 15 units, I can offer you a 15% discount on the extended warranty package.
 
-Michael: That''s quite helpful. Let me discuss this with my team and get back to you. Can you send me a detailed quote for both configurations - the standard Elite and the Elite Pro, both with the 3-year warranty?
+Michael: That is quite helpful. Let me discuss this with my team and get back to you. Can you send me a detailed quote for both configurations - the standard Elite and the Elite Pro, both with the 3-year warranty?
 
 Jennifer: Absolutely! I will send that over within the hour. I will also include some case studies from other development teams who have deployed our laptops. Is there anything else I can help clarify today?
 
@@ -893,24 +894,32 @@ Alex: Thanks, Robert. Talk to you next week.',
  'follow_up_scheduled', 'PowerBook Elite');
 
 -- ============================================================================
+-- GRANT PERMISSIONS TO LAB USERS
+-- ============================================================================
+
+-- Grant SELECT on all newly created tables to lab users
+GRANT SELECT ON ALL TABLES IN SCHEMA LAB_DATA.SAMPLES TO ROLE CORTEX_LAB_USER;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA LAB_DATA.SAMPLES TO ROLE CORTEX_LAB_USER;
+
+-- ============================================================================
 -- VERIFICATION QUERIES
 -- ============================================================================
 
 -- Verify all tables were created and populated
-SELECT 'CUSTOMER_SUPPORT_TICKETS' AS table_name, COUNT(*) AS row_count FROM CUSTOMER_SUPPORT_TICKETS
+SELECT 'CUSTOMER_SUPPORT_TICKETS' AS table_name, COUNT(*) AS row_count FROM LAB_DATA.SAMPLES.CUSTOMER_SUPPORT_TICKETS
 UNION ALL
-SELECT 'PRODUCT_REVIEWS', COUNT(*) FROM PRODUCT_REVIEWS
+SELECT 'PRODUCT_REVIEWS', COUNT(*) FROM LAB_DATA.SAMPLES.PRODUCT_REVIEWS
 UNION ALL
-SELECT 'PRODUCT_DOCS', COUNT(*) FROM PRODUCT_DOCS
+SELECT 'PRODUCT_DOCS', COUNT(*) FROM LAB_DATA.SAMPLES.PRODUCT_DOCS
 UNION ALL
-SELECT 'SALES_TRANSCRIPTS', COUNT(*) FROM SALES_TRANSCRIPTS;
+SELECT 'SALES_TRANSCRIPTS', COUNT(*) FROM LAB_DATA.SAMPLES.SALES_TRANSCRIPTS;
 
 -- Check language distribution in support tickets
 SELECT 
   language,
   COUNT(*) AS ticket_count,
   ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 1) AS percentage
-FROM CUSTOMER_SUPPORT_TICKETS
+FROM LAB_DATA.SAMPLES.CUSTOMER_SUPPORT_TICKETS
 GROUP BY language
 ORDER BY ticket_count DESC;
 
@@ -919,7 +928,7 @@ SELECT
   rating,
   COUNT(*) AS review_count,
   ROUND(AVG(helpful_count), 0) AS avg_helpful_votes
-FROM PRODUCT_REVIEWS
+FROM LAB_DATA.SAMPLES.PRODUCT_REVIEWS
 GROUP BY rating
 ORDER BY rating DESC;
 
@@ -927,7 +936,7 @@ ORDER BY rating DESC;
 SELECT 
   doc_type,
   COUNT(*) AS doc_count
-FROM PRODUCT_DOCS
+FROM LAB_DATA.SAMPLES.PRODUCT_DOCS
 GROUP BY doc_type
 ORDER BY doc_count DESC;
 
@@ -936,13 +945,20 @@ SELECT
   outcome,
   COUNT(*) AS call_count,
   ROUND(AVG(call_duration_minutes), 1) AS avg_duration_minutes
-FROM SALES_TRANSCRIPTS
+FROM LAB_DATA.SAMPLES.SALES_TRANSCRIPTS
 GROUP BY outcome
 ORDER BY call_count DESC;
 
 /*******************************************************************************
  * SAMPLE CORTEX QUERIES TO TEST THE DATA
- * Run these to verify Cortex functions work with your data
+ * 
+ * IMPORTANT: These queries require Cortex to be properly configured.
+ * If you get errors, verify:
+ * 1. SNOWFLAKE.CORTEX_USER database role was granted
+ * 2. Your Snowflake account has Cortex enabled
+ * 3. The model name is available in your region
+ * 
+ * Run these individually to test each Cortex function
  *******************************************************************************/
 
 -- Test sentiment analysis on support tickets
@@ -955,7 +971,7 @@ SELECT
     WHEN SNOWFLAKE.CORTEX.SENTIMENT(description) < -0.5 THEN 'Negative'
     ELSE 'Neutral'
   END AS sentiment_category
-FROM CUSTOMER_SUPPORT_TICKETS
+FROM LAB_DATA.SAMPLES.CUSTOMER_SUPPORT_TICKETS
 LIMIT 5;
 
 -- Test translation on non-English tickets
@@ -966,7 +982,7 @@ SELECT
   SNOWFLAKE.CORTEX.TRANSLATE(subject, language, 'en') AS english_subject,
   LEFT(description, 100) AS original_description_preview,
   LEFT(SNOWFLAKE.CORTEX.TRANSLATE(description, language, 'en'), 100) AS english_description_preview
-FROM CUSTOMER_SUPPORT_TICKETS
+FROM LAB_DATA.SAMPLES.CUSTOMER_SUPPORT_TICKETS
 WHERE language != 'en'
 LIMIT 3;
 
@@ -977,31 +993,33 @@ SELECT
   LENGTH(content) AS original_length,
   SNOWFLAKE.CORTEX.SUMMARIZE(content) AS summary,
   LENGTH(SNOWFLAKE.CORTEX.SUMMARIZE(content)) AS summary_length
-FROM PRODUCT_DOCS
+FROM LAB_DATA.SAMPLES.PRODUCT_DOCS
 WHERE doc_type = 'user_manual'
 LIMIT 2;
 
 -- Test LLM completion for categorization
+-- NOTE: Model availability varies by region. Try 'llama3-70b' or 'mistral-large' if 'mixtral-8x7b' fails
 SELECT 
   ticket_id,
   subject,
   category AS actual_category,
   SNOWFLAKE.CORTEX.COMPLETE(
-    'mixtral-8x7b',
+    'mixtral-8x7b',  -- Change model name if needed for your region
     'Categorize this customer support ticket into one of these categories: shipping_damage, returns, payment_issue, defective_product, general_inquiry. 
     
     Ticket: ' || subject || '
     
     Category:'
   ) AS suggested_category
-FROM CUSTOMER_SUPPORT_TICKETS
+FROM LAB_DATA.SAMPLES.CUSTOMER_SUPPORT_TICKETS
 LIMIT 5;
 
 /*******************************************************************************
  * POST-LOAD CHECKLIST:
  * 
  * □ All 4 tables created successfully
- * □ Row counts match expectations (15+ tickets, 15+ reviews, 10+ docs, 4+ calls)
+ * □ Row counts match expectations (15 tickets, 15 reviews, 10 docs, 4 calls)
+ * □ Permissions granted to CORTEX_LAB_USER role
  * □ Language variety in support tickets (5+ languages)
  * □ Rating variety in reviews (1-5 stars)
  * □ Cortex sentiment function works
