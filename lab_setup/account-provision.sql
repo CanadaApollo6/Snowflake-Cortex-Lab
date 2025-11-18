@@ -120,6 +120,7 @@ BEGIN
   
   RETURN 'Successfully created ' || NUM_USERS || ' lab accounts';
 END;
+
 -- ============================================================================
 -- SECTION 4: VERIFICATION
 -- ============================================================================
@@ -134,7 +135,7 @@ SELECT
   END AS status
 FROM SNOWFLAKE.ACCOUNT_USAGE.USERS
 WHERE NAME LIKE 'CORTEXLAB%'
-  AND DELETED IS NULL;
+  AND DELETED_ON IS NULL;
 
 -- Verify all schemas were created
 SELECT 
@@ -146,7 +147,7 @@ SELECT
   END AS status
 FROM SNOWFLAKE.ACCOUNT_USAGE.SCHEMATA
 WHERE SCHEMA_NAME LIKE 'CORTEXLAB%_WORKSPACE'
-  AND DELETED IS NULL;
+  AND DELETED_ON IS NULL;
 
 -- List all created users with their default settings
 SELECT 
@@ -157,7 +158,7 @@ SELECT
   CREATED_ON
 FROM SNOWFLAKE.ACCOUNT_USAGE.USERS
 WHERE NAME LIKE 'CORTEXLAB%'
-  AND DELETED IS NULL
+  AND DELETED_ON IS NULL
 ORDER BY NAME;
 
 -- ============================================================================
@@ -173,7 +174,7 @@ SELECT
   NAME || '_WORKSPACE' AS personal_schema
 FROM SNOWFLAKE.ACCOUNT_USAGE.USERS
 WHERE NAME LIKE 'CORTEXLAB%'
-  AND DELETED IS NULL
+  AND DELETED_ON IS NULL
 ORDER BY NAME;
 
 /*******************************************************************************
