@@ -2,7 +2,7 @@
  * SNOWFLAKE CORTEX AI LAB - WORKSHEET 2
  * CORTEX COMPLETE: Unleashing LLM Power with SQL
  * 
- * Time: 12 minutes
+ * Time: 20 minutes
  * Difficulty: Intermediate
  * 
  * In this worksheet, you'll use CORTEX.COMPLETE to tap into large language
@@ -14,6 +14,14 @@
  * - Extract structured data from unstructured text
  * - Compare different LLM models
  * - Build practical business solutions with LLMs
+ * 
+ * ESTIMATED TIME PER EXERCISE:
+ * - Exercise 2.1: 2 minutes
+ * - Exercise 2.2: 4 minutes
+ * - Exercise 2.3: 4 minutes
+ * - Exercise 2.4: 4 minutes
+ * - Exercise 2.5: 3 minutes
+ * - Exercise 2.6: 3 minutes (challenge)
  * 
  *******************************************************************************/
 
@@ -29,15 +37,25 @@ USE SCHEMA SAMPLES;
 
 /*
   CORTEX.COMPLETE syntax:
-  SNOWFLAKE.CORTEX.COMPLETE(model_name, prompt, options)
+  SNOWFLAKE.CORTEX.COMPLETE(model_name, prompt)
   
-  Available models:
+  Available models (availability varies by region):
   - 'mixtral-8x7b' - Fast, cost-effective, great for most tasks
   - 'mistral-large' - More capable, better reasoning
   - 'llama3-70b' - Strong general-purpose model
   - 'llama3-8b' - Faster, lighter version
+  - 'llama3.1-70b' - Latest Llama version with improved capabilities
+  - 'llama3.1-8b' - Faster version of Llama 3.1
   
   For this lab, we'll primarily use 'mixtral-8x7b' for speed and cost.
+  If you get a model availability error, try 'llama3-70b' or 'mistral-large'.
+  
+  PROMPT ENGINEERING TIPS:
+  - Be specific and clear about what you want
+  - Provide examples when possible
+  - Specify the desired output format
+  - Use consistent terminology
+  - Test and iterate on your prompts
 */
 
 -- STEP 1: Your first LLM query - a simple test
@@ -62,6 +80,12 @@ SELECT SNOWFLAKE.CORTEX.COMPLETE(
 /*
   SCENARIO: You receive hundreds of support tickets daily. You want to 
   automatically categorize them to route to the right team.
+  
+  CLASSIFICATION BEST PRACTICES:
+  - Provide clear category options
+  - Ask for consistent output format (e.g., "one word only")
+  - Include enough context from the ticket
+  - Be explicit about what to do with edge cases
 */
 
 -- STEP 1: Classify a single ticket
@@ -103,21 +127,31 @@ SELECT
 FROM CUSTOMER_SUPPORT_TICKETS
 LIMIT 10;
 
+-- QUESTION: How accurate is the AI categorization compared to actual_category?
+
 -- STEP 3: YOUR TURN - Add urgency classification
--- TODO: Modify the prompt to also classify urgency (low, medium, high)
+-- TODO: Modify the query below to classify urgency level (low, medium, high)
+--       based on the ticket subject and description
+-- 
+-- REQUIREMENTS:
+-- - Use the first 200 characters of description to keep prompt concise
+-- - Ask the LLM to respond with ONLY the urgency level
+-- - Include both subject and description in your prompt
+-- - Compare with the actual_priority column
+--
+-- HINT: Your prompt should ask for one of three values: low, medium, or high
+
 SELECT 
   ticket_id,
   subject,
+  LEFT(description, 200) AS description_preview,
   priority AS actual_priority,
   SNOWFLAKE.CORTEX.COMPLETE(
     'mixtral-8x7b',
-    -- TODO: Update this prompt to classify both category AND urgency
-    'Analyze this support ticket and respond with ONLY the urgency level (low, medium, or high):
+    -- TODO: Write your urgency classification prompt here
+    -- Start with: 'Analyze this support ticket and respond with ONLY...'
     
-    Subject: ' || subject || '
-    Description: ' || LEFT(description, 200) || '
     
-    Urgency level:'
   ) AS ai_urgency
 FROM CUSTOMER_SUPPORT_TICKETS
 LIMIT 8;
@@ -130,6 +164,12 @@ LIMIT 8;
 /*
   SCENARIO: Sales call transcripts contain valuable information, but it's 
   buried in conversation. Extract key details automatically.
+  
+  EXTRACTION BEST PRACTICES:
+  - Specify the exact fields you want extracted
+  - Define the output format (list, JSON, table, etc.)
+  - Limit input text length for better performance
+  - Be specific about how to handle missing information
 */
 
 -- STEP 1: Extract action items from a sales call
@@ -171,24 +211,24 @@ SELECT
 FROM SALES_TRANSCRIPTS
 WHERE call_id = 'CALL-002';
 
+-- QUESTION: Does the extracted information match what you see in the transcript?
+
 -- STEP 3: YOUR TURN - Extract product features from documentation
--- TODO: Write a query to extract key features from product docs
-SELECT 
-  doc_id,
-  title,
-  SNOWFLAKE.CORTEX.COMPLETE(
-    'mixtral-8x7b',
-    -- TODO: Write a prompt to extract the top 5 key features as a bullet list
-    'From this product documentation, extract the top 5 key features as a simple numbered list.
-    
-    Documentation:
-    ' || content || '
-    
-    Top 5 Features:'
-  ) AS key_features
-FROM PRODUCT_DOCS
-WHERE doc_type = 'user_manual'
-LIMIT 3;
+-- TODO: Write a complete query to extract key features from product documentation
+--
+-- REQUIREMENTS:
+-- - Select doc_id, title from PRODUCT_DOCS
+-- - Use CORTEX.COMPLETE to extract the top 5 key features
+-- - Ask for output as a numbered list (1. Feature one, 2. Feature two, etc.)
+-- - Filter for doc_type = 'user_manual'
+-- - Limit to 3 results
+--
+-- HINT: Your prompt should start with "From this product documentation, extract..."
+
+-- TODO: Write your complete query here
+
+
+
 
 -- ============================================================================
 -- EXERCISE 2.4: CONTENT GENERATION
@@ -197,6 +237,12 @@ LIMIT 3;
 
 /*
   SCENARIO: Generate personalized responses to customer reviews
+  
+  GENERATION BEST PRACTICES:
+  - Specify tone (professional, friendly, empathetic, etc.)
+  - Set length constraints (word/sentence limits)
+  - Provide context about what the content is for
+  - Include relevant data in the prompt
 */
 
 -- STEP 1: Generate response to a negative review
@@ -241,23 +287,21 @@ WHERE doc_type = 'user_manual'
   AND doc_id = 'DOC-001';
 
 -- STEP 3: YOUR TURN - Generate product descriptions from reviews
--- TODO: Create compelling product descriptions based on positive reviews
-SELECT 
-  product_name,
-  SNOWFLAKE.CORTEX.COMPLETE(
-    'mixtral-8x7b',
-    -- TODO: Write a prompt to generate a marketing description from these reviews
-    'Based on these customer reviews, write a compelling 50-word product description highlighting the most praised features.
-    
-    Reviews:
-    ' || LISTAGG(review_text, ' | ') WITHIN GROUP (ORDER BY rating DESC) || '
-    
-    Product Description:'
-  ) AS marketing_description
-FROM PRODUCT_REVIEWS
-WHERE rating >= 4
-  AND product_name = 'UltraSound Pro Wireless Headphones'
-GROUP BY product_name;
+-- TODO: Create a compelling marketing description based on positive reviews
+--
+-- REQUIREMENTS:
+-- - Use PRODUCT_REVIEWS table
+-- - Filter for rating >= 4 for 'UltraSound Pro Wireless Headphones'
+-- - Use LISTAGG to combine multiple review_text values
+-- - Generate a 50-word marketing description highlighting praised features
+-- - Group by product_name
+--
+-- HINT: LISTAGG syntax: LISTAGG(column, 'separator') WITHIN GROUP (ORDER BY ...)
+
+-- TODO: Write your complete query here
+
+
+
 
 -- ============================================================================
 -- EXERCISE 2.5: MODEL COMPARISON
@@ -265,8 +309,15 @@ GROUP BY product_name;
 -- ============================================================================
 
 /*
-  SCENARIO: Compare how different models handle the same task
+  SCENARIO: Compare how different models handle the same task.
   This helps you choose the right model for your use case.
+  
+  FACTORS TO CONSIDER:
+  - Quality: Is the output accurate and coherent?
+  - Length: Does it follow length constraints?
+  - Speed: How fast does it respond? (you won't see this in results)
+  - Cost: Larger models cost more per token
+  - Consistency: Does it follow instructions precisely?
 */
 
 -- STEP 1: Same prompt, different models
@@ -291,32 +342,27 @@ FROM CUSTOMER_SUPPORT_TICKETS
 WHERE ticket_id = 'TKT-001';
 
 -- QUESTION: Notice any differences in quality, length, or style?
+-- Which response is more concise? Which captures more detail?
 
--- STEP 2: YOUR TURN - Test models on a complex task
--- TODO: Try different models on extracting structured data
-SELECT 
-  'mixtral-8x7b' AS model,
-  SNOWFLAKE.CORTEX.COMPLETE(
-    'mixtral-8x7b',
-    'Extract: customer concern, product mentioned, resolution requested. Format as JSON.
-    
-    Ticket: ' || description
-  ) AS extracted_data
-FROM CUSTOMER_SUPPORT_TICKETS
-WHERE ticket_id = 'TKT-008'
+-- STEP 2: YOUR TURN - Test models on a complex extraction task
+-- TODO: Compare how different models extract structured data
+--
+-- REQUIREMENTS:
+-- - Test 'mixtral-8x7b' and 'llama3-70b' (or 'mistral-large' if llama3 unavailable)
+-- - Use UNION ALL to combine results
+-- - Extract: customer concern, product mentioned, resolution requested
+-- - Ask for JSON format output
+-- - Use ticket_id = 'TKT-008'
+--
+-- HINT: Follow the pattern from Step 1, but change the prompt for extraction
 
-UNION ALL
+-- TODO: Write your complete query here
 
-SELECT 
-  'llama3-70b' AS model,
-  SNOWFLAKE.CORTEX.COMPLETE(
-    'llama3-70b',
-    'Extract: customer concern, product mentioned, resolution requested. Format as JSON.
-    
-    Ticket: ' || description
-  ) AS extracted_data
-FROM CUSTOMER_SUPPORT_TICKETS
-WHERE ticket_id = 'TKT-008';
+
+
+
+-- QUESTION: Which model produces better structured output?
+-- Does one follow the JSON format instruction more closely?
 
 -- ============================================================================
 -- EXERCISE 2.6: ADVANCED - BUILDING A TICKET TRIAGE SYSTEM
@@ -325,72 +371,144 @@ WHERE ticket_id = 'TKT-008';
 
 /*
   SCENARIO: Build an automated ticket triage system that:
-  1. Translates non-English tickets
-  2. Extracts key information
-  3. Classifies urgency
-  4. Suggests next actions
+  1. Translates non-English tickets to English
+  2. Analyzes sentiment
+  3. Classifies category
+  4. Determines urgency
+  5. Suggests next actions
+  
+  This is a realistic business application combining multiple Cortex functions!
 */
 
--- YOUR CHALLENGE: Complete this comprehensive query
+-- EXAMPLE: Complete triage system (study this pattern)
 SELECT 
   ticket_id,
   customer_id,
   language,
   created_date,
+  status,
+  priority AS actual_priority,
   
-  -- Translate to English if needed
+  -- Translate subject to English if needed
   CASE 
     WHEN language = 'en' THEN subject
     ELSE SNOWFLAKE.CORTEX.TRANSLATE(subject, language, 'en')
   END AS english_subject,
   
-  -- Get sentiment
-  SNOWFLAKE.CORTEX.SENTIMENT(description) AS sentiment_score,
+  -- Get sentiment score
+  sentiment_score,
   
   -- Classify category
-  SNOWFLAKE.CORTEX.COMPLETE(
-    'mixtral-8x7b',
-    'Categorize this ticket (one word): shipping, product_quality, payment, technical, or other.
-    
-    ' || subject || '
-    
-    Category:'
-  ) AS ticket_category,
+  ticket_category,
   
   -- Determine urgency
-  SNOWFLAKE.CORTEX.COMPLETE(
-    'mixtral-8x7b',
-    'Rate urgency (low/medium/high) based on this ticket:
-    
-    ' || description || '
-    
-    Urgency:'
-  ) AS urgency_level,
+  urgency_level,
   
   -- Suggest action
-  SNOWFLAKE.CORTEX.COMPLETE(
-    'mixtral-8x7b',
-    'What is the best next action for this support ticket? One sentence.
-    
-    ' || LEFT(description, 300) || '
-    
-    Recommended action:'
-  ) AS suggested_action
+  suggested_action
 
-FROM CUSTOMER_SUPPORT_TICKETS
-WHERE status = 'open'
+FROM (
+  -- First translate and get base data
+  SELECT 
+    ticket_id,
+    customer_id,
+    language,
+    created_date,
+    status,
+    priority,
+    subject,
+    CASE 
+      WHEN language = 'en' THEN description
+      ELSE SNOWFLAKE.CORTEX.TRANSLATE(description, language, 'en')
+    END AS english_description
+  FROM CUSTOMER_SUPPORT_TICKETS
+  WHERE status = 'open'
+),
+-- Then calculate all AI features from the translated text
+LATERAL (
+  SELECT 
+    SNOWFLAKE.CORTEX.SENTIMENT(english_description) AS sentiment_score,
+    
+    SNOWFLAKE.CORTEX.COMPLETE(
+      'mixtral-8x7b',
+      'Categorize this ticket into ONE word: shipping, product_quality, payment, technical, or other.
+      
+      Ticket: ' || english_description || '
+      
+      Category:'
+    ) AS ticket_category,
+    
+    SNOWFLAKE.CORTEX.COMPLETE(
+      'mixtral-8x7b',
+      'Rate urgency as ONE word only (low, medium, or high) based on this ticket:
+      
+      ' || LEFT(english_description, 300) || '
+      
+      Urgency:'
+    ) AS urgency_level,
+    
+    SNOWFLAKE.CORTEX.COMPLETE(
+      'mixtral-8x7b',
+      'What is the best next action for this support ticket? Respond in one sentence.
+      
+      ' || LEFT(english_description, 300) || '
+      
+      Recommended action:'
+    ) AS suggested_action
+)
 ORDER BY sentiment_score ASC
 LIMIT 5;
+
+-- YOUR CHALLENGE: Can you improve this system?
+-- Ideas to try:
+-- - Add a confidence score for categorization
+-- - Generate a draft response to the customer
+-- - Estimate resolution time based on similar tickets
+-- - Identify if a ticket mentions a competitor
 
 /*******************************************************************************
  * WORKSHEET 2 COMPLETE! ✓
  * 
  * KEY TAKEAWAYS:
  * - COMPLETE gives you full LLM capabilities in SQL
- * - Prompting is key - be specific and provide examples
- * - Different models have different strengths (and costs)
+ * - Prompting is key - be specific, provide examples, specify format
+ * - Different models have different strengths and costs
+ * - Use subqueries to avoid calling expensive functions multiple times
  * - You can build sophisticated AI workflows entirely in Snowflake
  * - Classification, extraction, and generation are all possible
+ * - Combine multiple Cortex functions for powerful solutions
+ * 
+ * PROMPT ENGINEERING REMINDERS:
+ * ✓ Be specific about what you want
+ * ✓ Specify output format clearly
+ * ✓ Provide enough context, but not too much
+ * ✓ Ask for one thing at a time when possible
+ * ✓ Test different phrasings to improve results
  * 
  * NEXT: Move to Worksheet 3 to learn about Cortex Search and RAG patterns
  *******************************************************************************/
+
+-- ============================================================================
+-- OPTIONAL: CHECK YOUR WORK
+-- Run these verification queries to test your solutions
+-- ============================================================================
+
+-- Verify Exercise 2.2 Step 3: Should return 8 tickets with urgency levels
+-- SELECT COUNT(*) AS tickets_with_urgency
+-- FROM (your Exercise 2.2 Step 3 query);
+-- Expected: 8 rows with low/medium/high urgency values
+
+-- Verify Exercise 2.3 Step 3: Should return 3 feature lists
+-- SELECT COUNT(*) AS docs_with_features
+-- FROM (your Exercise 2.3 Step 3 query);
+-- Expected: 3 rows with numbered feature lists
+
+-- Verify Exercise 2.4 Step 3: Should return 1 marketing description
+-- SELECT COUNT(*) AS descriptions
+-- FROM (your Exercise 2.4 Step 3 query);
+-- Expected: 1 row with ~50 word description
+
+-- Verify Exercise 2.5 Step 2: Should return 2 rows (one per model)
+-- SELECT COUNT(DISTINCT model) AS model_count
+-- FROM (your Exercise 2.5 Step 2 query);
+-- Expected: 2 different models tested
