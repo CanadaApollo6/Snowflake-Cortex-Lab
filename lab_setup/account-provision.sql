@@ -77,40 +77,49 @@ DECLARE
   PASSWORD VARCHAR DEFAULT 'CortexEvent2025!'; -- CHANGE THIS to your preferred password
   username VARCHAR;
   schema_name VARCHAR;
+  user_role VARCHAR;
 BEGIN
   FOR i IN 1 TO NUM_USERS DO
     username := 'CORTEXLAB' || LPAD(i::STRING, 2, '0');
     schema_name := 'CORTEXLAB' || LPAD(i::STRING, 2, '0') || '_WORKSPACE';
+    user_role := 'CORTEXLAB' || LPAD(i::STRING, 2, '0') || '_ROLE';
+    
+    -- Create individual role for this user
+    EXECUTE IMMEDIATE 
+      'CREATE ROLE IF NOT EXISTS ' || user_role || '
+       COMMENT = ''Personal role for ' || username || '''';
+    
+    -- Grant the shared lab role to the personal role (role inheritance)
+    EXECUTE IMMEDIATE
+      'GRANT ROLE CORTEX_LAB_USER TO ROLE ' || user_role;
     
     -- Create user
     EXECUTE IMMEDIATE 
       'CREATE USER IF NOT EXISTS ' || username || ' 
        PASSWORD = ''' || PASSWORD || '''
-       DEFAULT_ROLE = ''CORTEX_LAB_USER''
+       DEFAULT_ROLE = ''' || user_role || '''
        DEFAULT_WAREHOUSE = ''CORTEX_LAB_WH''
        DEFAULT_NAMESPACE = ''LAB_DATA.' || schema_name || '''
        MUST_CHANGE_PASSWORD = FALSE
        COMMENT = ''Lab participant - created ' || CURRENT_TIMESTAMP()::STRING || '''';
     
-    -- Grant role to user
+    -- Grant personal role to user
     EXECUTE IMMEDIATE 
-      'GRANT ROLE CORTEX_LAB_USER TO USER ' || username;
+      'GRANT ROLE ' || user_role || ' TO USER ' || username;
     
     -- Create personal workspace schema
     EXECUTE IMMEDIATE
       'CREATE SCHEMA IF NOT EXISTS LAB_DATA.' || schema_name || '
        COMMENT = ''Personal workspace for ' || username || '''';
     
-    -- Grant ownership of the workspace schema to the user
-    -- This allows them to create and manage objects in their workspace
+    -- Grant ownership of the workspace schema to the user's personal role
     EXECUTE IMMEDIATE
-      'GRANT OWNERSHIP ON SCHEMA LAB_DATA.' || schema_name || ' TO USER ' || username;
+      'GRANT OWNERSHIP ON SCHEMA LAB_DATA.' || schema_name || ' TO ROLE ' || user_role;
     
   END FOR;
   
   RETURN 'Successfully created ' || NUM_USERS || ' lab accounts';
 END;
-
 -- ============================================================================
 -- SECTION 4: VERIFICATION
 -- ============================================================================
