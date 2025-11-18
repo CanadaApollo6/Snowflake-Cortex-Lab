@@ -31,6 +31,8 @@ USE SCHEMA SAMPLES;
   urgent negative tickets that need immediate attention.
   
   The SENTIMENT function returns a score from -1 (very negative) to +1 (very positive)
+  
+  SYNTAX: SNOWFLAKE.CORTEX.SENTIMENT(text_column)
 */
 
 -- STEP 1: Run this query to see basic sentiment analysis
@@ -42,35 +44,55 @@ FROM CUSTOMER_SUPPORT_TICKETS
 LIMIT 5;
 
 -- STEP 2: Now let's categorize tickets by sentiment
--- TODO: Fill in the CASE statement to categorize sentiment scores
+-- This uses a subquery to avoid calling SENTIMENT multiple times
 SELECT 
   ticket_id,
   subject,
-  SNOWFLAKE.CORTEX.SENTIMENT(description) AS sentiment_score,
+  sentiment_score,
   CASE 
-    WHEN SNOWFLAKE.CORTEX.SENTIMENT(description) > 0.5 THEN 'Positive'
-    WHEN SNOWFLAKE.CORTEX.SENTIMENT(description) < -0.5 THEN 'Negative'
+    WHEN sentiment_score > 0.5 THEN 'Positive'
+    WHEN sentiment_score < -0.5 THEN 'Negative'
     ELSE 'Neutral'
   END AS sentiment_category,
   status,
   priority
-FROM CUSTOMER_SUPPORT_TICKETS
+FROM (
+  SELECT 
+    ticket_id,
+    subject,
+    SNOWFLAKE.CORTEX.SENTIMENT(description) AS sentiment_score,
+    status,
+    priority
+  FROM CUSTOMER_SUPPORT_TICKETS
+)
 ORDER BY sentiment_score ASC;  -- Most negative first
 
 -- QUESTION: Which ticket is most negative? Does its priority match the sentiment?
 
 -- STEP 3: YOUR TURN - Find all open tickets with negative sentiment
--- TODO: Add a WHERE clause to filter for open tickets with sentiment < -0.3
+-- TODO: Complete this query to filter for:
+--       - status = 'open'
+--       - sentiment_score < -0.3
+-- HINT: Use a subquery pattern like Step 2 to avoid calling SENTIMENT twice
+
 SELECT 
   ticket_id,
   subject,
-  SNOWFLAKE.CORTEX.SENTIMENT(description) AS sentiment_score,
+  sentiment_score,
   status,
   priority
-FROM CUSTOMER_SUPPORT_TICKETS
--- TODO: Add your WHERE clause here
-WHERE status = 'open' 
-  AND SNOWFLAKE.CORTEX.SENTIMENT(description) < -0.3
+FROM (
+  SELECT 
+    ticket_id,
+    subject,
+    SNOWFLAKE.CORTEX.SENTIMENT(description) AS sentiment_score,
+    status,
+    priority
+  FROM CUSTOMER_SUPPORT_TICKETS
+)
+WHERE -- TODO: Add your filter conditions here
+
+
 ORDER BY sentiment_score ASC;
 
 -- ============================================================================
@@ -82,11 +104,14 @@ ORDER BY sentiment_score ASC;
   SCENARIO: You have customers writing in multiple languages, but your 
   support team primarily speaks English. You need to translate incoming tickets.
   
-  TRANSLATE function syntax: TRANSLATE(text, source_language, target_language)
+  SYNTAX: SNOWFLAKE.CORTEX.TRANSLATE(text, source_language, target_language)
+  
+  Common language codes: 'en' (English), 'es' (Spanish), 'fr' (French), 
+                        'de' (German), 'ja' (Japanese), 'zh' (Chinese)
 */
 
 -- STEP 1: See what languages we have in our tickets
-SELECT DISTINCT 
+SELECT 
   language,
   COUNT(*) AS ticket_count
 FROM CUSTOMER_SUPPORT_TICKETS
@@ -105,15 +130,18 @@ FROM CUSTOMER_SUPPORT_TICKETS
 WHERE language != 'en';
 
 -- STEP 3: YOUR TURN - Translate AND analyze sentiment on Spanish tickets
--- TODO: Complete this query to translate Spanish tickets and get their sentiment
+-- TODO: Complete this query to:
+--       1. Translate Spanish subject and description to English
+--       2. Analyze sentiment on the TRANSLATED English description
+-- HINT: You can nest functions like: SENTIMENT(TRANSLATE(...))
+
 SELECT 
   ticket_id,
   subject AS spanish_subject,
-  SNOWFLAKE.CORTEX.TRANSLATE(subject, 'es', 'en') AS english_subject,
-  -- TODO: Add SENTIMENT analysis on the TRANSLATED English text
-  SNOWFLAKE.CORTEX.SENTIMENT(
-    SNOWFLAKE.CORTEX.TRANSLATE(description, 'es', 'en')
-  ) AS sentiment_score
+  -- TODO: Translate subject from Spanish to English
+  
+  -- TODO: Translate description from Spanish to English, then analyze sentiment
+  
 FROM CUSTOMER_SUPPORT_TICKETS
 WHERE language = 'es';
 
@@ -128,6 +156,8 @@ WHERE language = 'es';
 /*
   SCENARIO: Your product documentation is lengthy. You want to create 
   quick summaries for your support team to reference during calls.
+  
+  SYNTAX: SNOWFLAKE.CORTEX.SUMMARIZE(text_column)
   
   SUMMARIZE automatically condenses text while preserving key information.
 */
@@ -158,26 +188,28 @@ WHERE doc_id = 'DOC-004'  -- SmartCam troubleshooting guide
 LIMIT 1;
 
 -- STEP 3: YOUR TURN - Summarize all user manuals
--- TODO: Create summaries for all documents of type 'user_manual'
+-- TODO: Complete this query to create summaries for all documents 
+--       where doc_type = 'user_manual'
+-- HINT: Use the SUMMARIZE function on the content column
+
 SELECT 
   doc_id,
   title,
-  -- TODO: Add SUMMARIZE function here
-  SNOWFLAKE.CORTEX.SUMMARIZE(content) AS summary
+  -- TODO: Add SUMMARIZE function here to create summary of content
+
 FROM PRODUCT_DOCS
-WHERE doc_type = 'user_manual';
+WHERE -- TODO: Add filter for user_manual document type
+;
 
 -- BONUS CHALLENGE: Summarize sales call transcripts
--- TODO: Write a query to summarize the sales transcripts and identify the outcome
-SELECT 
-  call_id,
-  sales_rep,
-  customer_name,
-  call_duration_minutes,
-  outcome,
-  SNOWFLAKE.CORTEX.SUMMARIZE(transcript) AS call_summary
-FROM SALES_TRANSCRIPTS
-ORDER BY call_duration_minutes DESC;
+-- TODO: Write a complete query to:
+--       - Select call_id, sales_rep, customer_name, call_duration_minutes, outcome
+--       - Summarize the transcript column
+--       - Order by call_duration_minutes DESC
+-- HINT: Look at the SALES_TRANSCRIPTS table structure
+
+-- TODO: Write your query here
+
 
 -- ============================================================================
 -- EXERCISE 1.4: COMBINING MULTIPLE CORTEX FUNCTIONS
@@ -193,81 +225,113 @@ ORDER BY call_duration_minutes DESC;
   This is a common pattern: TRANSLATE → SENTIMENT → SUMMARIZE
 */
 
--- STEP 1: The complete multi-function query
+-- STEP 1: The complete multi-function query (example provided)
+-- Study this pattern - you'll apply it in Step 2
 SELECT 
   ticket_id,
   language,
   country,
   priority,
   created_date,
-  -- Original subject
   subject AS original_subject,
-  -- Translated subject (only if not English)
+  -- Translate subject only if not English
   CASE 
     WHEN language = 'en' THEN subject
     ELSE SNOWFLAKE.CORTEX.TRANSLATE(subject, language, 'en')
   END AS english_subject,
-  -- Sentiment analysis
-  SNOWFLAKE.CORTEX.SENTIMENT(
+  -- Get sentiment and summary from subquery to avoid recalculating translation
+  sentiment_score,
+  issue_summary
+FROM (
+  SELECT 
+    ticket_id,
+    language,
+    country,
+    priority,
+    created_date,
+    subject,
+    -- Translate description once
     CASE 
       WHEN language = 'en' THEN description
       ELSE SNOWFLAKE.CORTEX.TRANSLATE(description, language, 'en')
-    END
-  ) AS sentiment_score,
-  -- Summary of the issue
-  SNOWFLAKE.CORTEX.SUMMARIZE(
-    CASE 
-      WHEN language = 'en' THEN description
-      ELSE SNOWFLAKE.CORTEX.TRANSLATE(description, language, 'en')
-    END
-  ) AS issue_summary
-FROM CUSTOMER_SUPPORT_TICKETS
-WHERE status = 'open'
+    END AS english_description
+  FROM CUSTOMER_SUPPORT_TICKETS
+  WHERE status = 'open'
+),
+-- Calculate sentiment and summary from the already-translated text
+LATERAL (
+  SELECT 
+    SNOWFLAKE.CORTEX.SENTIMENT(english_description) AS sentiment_score,
+    SNOWFLAKE.CORTEX.SUMMARIZE(english_description) AS issue_summary
+)
 ORDER BY sentiment_score ASC
 LIMIT 10;
 
 -- STEP 2: YOUR TURN - Create a product review analysis
--- TODO: Analyze product reviews with rating, sentiment, and summary
--- Hint: Translate reviews to English first if needed
-SELECT 
-  review_id,
-  product_name,
-  rating,
-  language,
-  -- TODO: Translate review_text to English if not already English
-  CASE 
-    WHEN language = 'en' THEN review_text
-    ELSE SNOWFLAKE.CORTEX.TRANSLATE(review_text, language, 'en')
-  END AS english_review,
-  -- TODO: Get sentiment score
-  SNOWFLAKE.CORTEX.SENTIMENT(
-    CASE 
-      WHEN language = 'en' THEN review_text
-      ELSE SNOWFLAKE.CORTEX.TRANSLATE(review_text, language, 'en')
-    END
-  ) AS sentiment_score,
-  -- TODO: Create a summary
-  SNOWFLAKE.CORTEX.SUMMARIZE(
-    CASE 
-      WHEN language = 'en' THEN review_text
-      ELSE SNOWFLAKE.CORTEX.TRANSLATE(review_text, language, 'en')
-    END
-  ) AS review_summary
-FROM PRODUCT_REVIEWS
-ORDER BY rating ASC;
+-- TODO: Build a complete query to analyze product reviews with:
+--       - review_id, product_name, rating, language
+--       - Translated review text (to English if needed)
+--       - Sentiment score of the review
+--       - Summary of the review
+-- 
+-- REQUIREMENTS:
+-- - Use the PRODUCT_REVIEWS table
+-- - Translate non-English reviews to English first
+-- - Calculate sentiment on the English version
+-- - Create a summary of the English version
+-- - Order by rating ASC to see worst reviews first
+--
+-- HINT: Follow the pattern from Step 1 using subqueries to avoid
+--       translating the same text multiple times
+
+-- TODO: Write your complete query here
+
+
+
 
 -- QUESTION: Do the sentiment scores align with the star ratings? 
 -- When might they differ?
+-- 
+-- Consider these scenarios:
+-- - Sarcastic reviews ("Great! It broke after 2 days..." = positive words, negative meaning)
+-- - Mixed reviews (love product features, hate shipping/price)
+-- - Cultural differences in expressing satisfaction
+-- - Brief vs detailed reviews
 
 /*******************************************************************************
  * WORKSHEET 1 COMPLETE! ✓
  * 
  * KEY TAKEAWAYS:
  * - Cortex functions are just SQL - no Python, no APIs, no complexity
- * - SENTIMENT helps prioritize customer issues
- * - TRANSLATE breaks down language barriers
+ * - SENTIMENT helps prioritize customer issues (-1 to +1 scale)
+ * - TRANSLATE breaks down language barriers (supports 100+ languages)
  * - SUMMARIZE condenses information for quick understanding
  * - Functions can be combined and nested for powerful workflows
+ * - Use subqueries to avoid calling expensive functions multiple times
+ * 
+ * PERFORMANCE TIP:
+ * When using Cortex functions in both SELECT and WHERE clauses, or multiple
+ * times in the same query, use subqueries to calculate once and reuse the result.
  * 
  * NEXT: Move to Worksheet 2 to learn about CORTEX.COMPLETE and advanced LLM usage
  *******************************************************************************/
+
+-- ============================================================================
+-- OPTIONAL: CHECK YOUR WORK
+-- Run these verification queries to test your solutions
+-- ============================================================================
+
+-- Verify Exercise 1.1 Step 3: Should return 3-5 tickets
+-- SELECT COUNT(*) AS open_negative_tickets 
+-- FROM (your Exercise 1.1 Step 3 query);
+-- Expected: Between 3-5 tickets
+
+-- Verify Exercise 1.3 Step 3: Should return 5 summaries
+-- SELECT COUNT(*) AS user_manual_count 
+-- FROM (your Exercise 1.3 Step 3 query);
+-- Expected: Exactly 5 documents
+
+-- Verify Exercise 1.4 Step 2: Should return 15 reviews
+-- SELECT COUNT(*) AS total_reviews
+-- FROM (your Exercise 1.4 Step 2 query);
+-- Expected: Exactly 15 reviews
