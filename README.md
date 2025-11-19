@@ -4,7 +4,7 @@ An interactive, hands-on workshop that teaches data professionals how to harness
 
 [![Snowflake](https://img.shields.io/badge/Snowflake-Cortex%20AI-29B5E8?logo=snowflake&logoColor=white)](https://www.snowflake.com/en/data-cloud/cortex/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Workshop Duration](https://img.shields.io/badge/Duration-45%20minutes-blue)](.)
+[![Workshop Duration](https://img.shields.io/badge/Duration-50%20minutes-blue)](.)
 
 ## Overview
 
@@ -24,7 +24,7 @@ This lab guides participants through real-world AI use cases using Snowflake Cor
 | Worksheet | Topic | Time | Difficulty | Key Concepts |
 |-----------|-------|------|------------|--------------|
 | [01](worksheets/worksheet-01.sql) | **Cortex LLM Functions** | 15 min | Beginner | SENTIMENT, TRANSLATE, SUMMARIZE |
-| [02](worksheets/worksheet-02.sql) | **Cortex Complete** | 12 min | Intermediate | COMPLETE, prompting, classification, extraction |
+| [02](worksheets/worksheet-02.sql) | **Cortex Complete** | 20 min | Intermediate | COMPLETE, prompting, classification, extraction |
 | [03](worksheets/worksheet-03.sql) | **Cortex Search & RAG** | 15 min | Advanced | Semantic search, vector embeddings, RAG patterns |
 
 **Total Duration:** ~45 minutes (including setup and buffer time)
