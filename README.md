@@ -27,7 +27,7 @@ This lab guides participants through real-world AI use cases using Snowflake Cor
 | [02](worksheets/worksheet-02.sql) | **Cortex Complete** | 20 min | Intermediate | COMPLETE, prompting, classification, extraction |
 | [03](worksheets/worksheet-03.sql) | **Cortex Search & RAG** | 15 min | Advanced | Semantic search, vector embeddings, RAG patterns |
 
-**Total Duration:** ~45 minutes (including setup and buffer time)
+**Total Duration:** ~50 minutes - 1 hour (including setup and buffer time)
 
 ## Prerequisites
 
